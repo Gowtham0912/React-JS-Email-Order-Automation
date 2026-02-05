@@ -1,0 +1,23 @@
+# ===== Environment =====
+.env
+
+# ===== Python / Flask =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+
+# ===== Database =====
+*.db
+
+# ===== Node / React =====
+node_modules/
+dist/
+dist-ssr
+*.local
+
+# ===== Editor / OS =====
+.vscode/
+.idea
+.DS_Store

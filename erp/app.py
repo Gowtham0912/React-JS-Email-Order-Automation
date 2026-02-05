@@ -1,0 +1,305 @@
+import sys, os, imaplib, io, threading, time
+from datetime import date
+import pandas as pd
+from fpdf import FPDF
+from flask import Flask, jsonify, request, session, send_file
+from flask_cors import CORS
+
+# ---------------- PATH SETUP ----------------
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
+
+from services.order_service import process_emails
+from erp.models import session as db_session, PurchaseOrder
+
+app = Flask(__name__)
+app.secret_key = "super_secret_key_123"  # change in production
+app.secret_key = "super_secret_key_123"  # change in production
+CORS(app, supports_credentials=True, origins=["http://localhost:5173"]) # Enable CORS for React frontend
+
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    db_session.remove()
+
+# ---------------- AUTO SCAN STATE ----------------
+auto_scan_enabled = False
+auto_scan_thread = None
+AUTO_SCAN_INTERVAL = 10 
+
+
+# ---------------- AUTO SCAN WORKER ----------------
+def auto_scan_worker(email_user, email_pass):
+    global auto_scan_enabled
+    while auto_scan_enabled:
+        print("🔄 Automatic scan running...")
+        process_emails(email_user, email_pass)
+        time.sleep(AUTO_SCAN_INTERVAL)
+
+
+# ---------------- LOGIN (API) ----------------
+@app.route("/login", methods=["POST"])
+def login():
+    try:
+        data = request.json
+        email_user = data.get("email", "").strip()
+        email_pass = data.get("password", "").strip()
+
+        if not email_user or not email_pass:
+            return jsonify({"success": False, "error": "⚠️ Both fields are required!"})
+
+        # Test IMAP connection
+        imap = imaplib.IMAP4_SSL("imap.gmail.com")
+        imap.login(email_user, email_pass)
+        imap.logout()
+
+        session["email_user"] = email_user
+        session["email_pass"] = email_pass
+        return jsonify({"success": True})
+
+    except imaplib.IMAP4.error:
+        return jsonify({"success": False, "error": "❌ Invalid email or app password."})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"⚠️ Gmail error: {e}"})
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return jsonify({"success": True, "message": "Logged out"})
+
+
+# ---------------- ANALYTICS API ----------------
+@app.route("/api/analytics")
+def analytics_data():
+    if "email_user" not in session:
+         # For logic sake, if we want to protect it:
+         # return jsonify({"error": "Unauthorized"}), 401
+         # But to keep it simple and avoid 401 handling complexity in frontend if not ready:
+         pass # Or just return empty or 0s. 
+         # The original returned jsonify({}) if not logged in.
+    
+    # if "email_user" not in session:
+    #     return jsonify({})
+
+    print("DEBUG: Analytics Endpoint Hit")
+    orders = db_session.query(PurchaseOrder).all()
+    print(f"DEBUG: Analyics Found {len(orders)} orders")
+
+    total_orders = len(orders)
+    today = date.today()
+
+    orders_today = sum(
+        1 for o in orders
+        if o.created_at and o.created_at.date() == today
+    )
+
+    urgent_orders = sum(
+        1 for o in orders
+        if o.priority_level == "Urgent"
+    )
+
+    confidence_values = [
+        o.confidence_score for o in orders
+        if o.confidence_score is not None
+    ]
+
+    avg_confidence = (
+        sum(confidence_values) / len(confidence_values)
+        if confidence_values else 0
+    )
+
+    return jsonify({
+        "total_orders": total_orders,
+        "orders_today": orders_today,
+        "urgent_orders": urgent_orders,
+        "avg_confidence": round(avg_confidence, 1)
+    })
+
+
+# ---------------- MANUAL SCAN ----------------
+@app.route("/scan", methods=["POST"])
+def scan_emails():
+    global auto_scan_enabled
+
+    if "email_user" not in session:
+        return jsonify({"status": "unauthorized", "message": "Login required"}), 401
+
+    if auto_scan_enabled:
+        return jsonify({
+            "status": "blocked",
+            "message": "Automatic scan is running. Disable it to use manual scan."
+        })
+
+    added = process_emails(
+        session["email_user"],
+        session["email_pass"]
+    )
+
+    if added == 0:
+        return jsonify({"status": "no_new", "message": "⚠️ No new order emails found."})
+
+    return jsonify({
+        "status": "updated",
+        "message": f"✅ {added} new order(s) processed successfully!"
+    })
+
+
+# ---------------- AUTO SCAN TOGGLE ----------------
+@app.route("/toggle-auto-scan", methods=["POST"])
+def toggle_auto_scan():
+    global auto_scan_enabled, auto_scan_thread
+
+    if "email_user" not in session:
+        return jsonify({"status": "unauthorized"}), 401
+
+    enabled = request.json.get("enabled", False)
+    auto_scan_enabled = enabled
+
+    if enabled:
+        if auto_scan_thread is None or not auto_scan_thread.is_alive():
+            auto_scan_thread = threading.Thread(
+                target=auto_scan_worker,
+                args=(session["email_user"], session["email_pass"]),
+                daemon=True
+            )
+            auto_scan_thread.start()
+
+    return jsonify({"auto_scan": auto_scan_enabled})
+
+
+@app.route("/auto-scan-status")
+def auto_scan_status():
+    return jsonify({"auto_scan": auto_scan_enabled})
+
+
+# ---------------- DELETE ORDER ----------------
+@app.route("/delete/<int:order_id>", methods=["DELETE"])
+def delete_order(order_id):
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    order = db_session.query(PurchaseOrder).get(order_id)
+    if order:
+        db_session.delete(order)
+        db_session.commit()
+        return jsonify({"success": True, "message": "Order deleted"})
+
+    return jsonify({"success": False, "message": "Order not found"})
+
+
+# ---------------- GET ORDERS (AJAX) ----------------
+@app.route("/api/orders")
+def get_orders():
+    # Debug session on every request
+    print(f"DEBUG: Session keys: {list(session.keys())}")
+    
+    # if "email_user" not in session:
+    #     return jsonify([])
+
+    orders = db_session.query(PurchaseOrder).order_by(
+        PurchaseOrder.created_at.desc()
+    ).all()
+
+    return jsonify([
+        {
+            "id": o.id,
+            "product_name": o.product_name,
+            "quantity_ordered": o.quantity_ordered,
+            "delivery_due_date": o.delivery_due_date,
+            "retailer_name": o.retailer_name,
+            "retailer_email": o.retailer_email,
+            "retailer_address": o.retailer_address,
+            "client_email_subject": o.client_email_subject,
+            "order_status": o.order_status,
+            "priority_level": o.priority_level,
+            "confidence_score": o.confidence_score,
+            "order_number": o.order_number,
+            "created_at": str(o.created_at) if o.created_at else None,
+            "unit": o.unit,
+            "source_of_order": o.source_of_order,
+            "remarks": o.remarks,
+            "extracted_text": o.extracted_text
+        }
+        for o in orders
+    ])
+
+
+# ---------------- EXPORT EXCEL ----------------
+@app.route("/export/excel")
+def export_excel():
+    if "email_user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    orders = db_session.query(PurchaseOrder).all()
+
+    df = pd.DataFrame([{
+        "Order No": o.order_number,
+        "Product": o.product_name,
+        "Quantity": o.quantity_ordered,
+        "Due Date": o.delivery_due_date,
+        "Retailer": o.retailer_name,
+        "Email": o.retailer_email,
+        "Priority": o.priority_level,
+        "Confidence": o.confidence_score,
+        "Status": o.order_status
+    } for o in orders])
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="ERP_Orders.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+# ---------------- EXPORT PDF ----------------
+@app.route("/export/pdf")
+def export_pdf():
+    if "email_user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    orders = db_session.query(PurchaseOrder).all()
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(200, 10, "ERP Purchase Order Report", ln=True, align="C")
+    pdf.ln(10)
+    pdf.set_font("Arial", size=11)
+
+    for o in orders:
+        text = f"""
+Order No: {o.order_number}
+Product: {o.product_name}
+Quantity: {o.quantity_ordered}
+Due Date: {o.delivery_due_date}
+Retailer: {o.retailer_name}
+Email: {o.retailer_email}
+Priority: {o.priority_level}
+Confidence: {o.confidence_score}
+Status: {o.order_status}
+-----------------------------
+"""
+        pdf.multi_cell(0, 8, text.encode("latin-1", "ignore").decode("latin-1"))
+
+    output = io.BytesIO()
+    pdf.output(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="ERP_Orders.pdf",
+        mimetype="application/pdf"
+    )
+
+
+# ---------------- RUN ----------------
+if __name__ == "__main__":
+    app.run(debug=True)

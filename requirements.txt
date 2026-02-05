@@ -1,0 +1,19 @@
+flask
+flask-cors
+requests
+pytesseract
+pdf2image
+pillow
+python-magic
+spacy
+sqlalchemy
+pandas
+gunicorn
+email-validator
+python-dotenv
+dateparser
+python-dateutil
+beautifulsoup4
+poppler
+tesseract ocr
+openpyxl fpdf
