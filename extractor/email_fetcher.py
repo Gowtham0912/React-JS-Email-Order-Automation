@@ -46,6 +46,7 @@ def fetch_emails(email_user, email_pass):
 
             subject = msg["subject"]
             body = ""
+            attachment_filename = None  # Track attachment filename
 
             if msg.is_multipart():
                 for part in msg.walk():
@@ -67,6 +68,7 @@ def fetch_emails(email_user, email_pass):
                         with open(filepath, "wb") as f:
                             f.write(part.get_payload(decode=True))
                         print(f"📎 Saved attachment: {filename}")
+                        attachment_filename = filename  # Store the filename
 
                         ext = filename.lower()
                         extracted_text = ""
@@ -86,7 +88,7 @@ def fetch_emails(email_user, email_pass):
                 body = msg.get_payload(decode=True).decode(errors="ignore")
                 body = clean_email_body(body)
 
-            mail_data.append({"subject": subject, "body": body})
+            mail_data.append({"subject": subject, "body": body, "attachment": attachment_filename})
 
         imap.close()
         imap.logout()

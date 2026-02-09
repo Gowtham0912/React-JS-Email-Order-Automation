@@ -19,6 +19,7 @@ LABELS = {
     "retailer_name": [r"\bretailer\s*name\b", r"\bcontact\s*person\b", r"\bcustomer\s*name\b",
                       r"\bcompany\s*name\b", r"\bname\b"],
     "email":     [r"\bemail\b", r"\be-mail\b", r"@"],
+    "phone":     [r"\bphone\b", r"\bmobile\b", r"\bcell\b", r"\bcontact\s*no\.?\b", r"\btel\.?\b", r"\bcall\b"],
 }
 
 DATE_PATTERNS = [
@@ -79,6 +80,26 @@ def _extend_wrapped_value(i: int, lines: List[str], acc: str) -> str:
 def _email(text: str) -> Optional[str]:
     m = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", text or "")
     return m.group(0) if m else None
+
+def _phone(text: str) -> Optional[str]:
+    """Extract phone numbers from text - supports various formats."""
+    if not text:
+        return None
+    # Patterns for phone numbers: +91 XXXXX XXXXX, (XXX) XXX-XXXX, XXX-XXX-XXXX, XXXXXXXXXX
+    patterns = [
+        r"\+?\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,5}[\s.-]?\d{3,5}",  # International format
+        r"\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}",  # US format (XXX) XXX-XXXX
+        r"\d{10,12}",  # Simple 10-12 digit number
+    ]
+    for pat in patterns:
+        m = re.search(pat, text)
+        if m:
+            phone = m.group(0).strip()
+            # Validate it has enough digits
+            digits = re.sub(r"\D", "", phone)
+            if len(digits) >= 10:
+                return phone
+    return None
 
 def _strict_parse_date(fragment: str) -> Optional[str]:
     if not fragment:
@@ -195,6 +216,7 @@ def extract_order_details(text: str, subject: Optional[str] = None) -> Dict[str,
         "retailer_name": None,
         "retailer_email": None,
         "retailer_address": None,
+        "retailer_phone": None,
     }
 
     raw = _normalize(text)
@@ -235,6 +257,11 @@ def extract_order_details(text: str, subject: Optional[str] = None) -> Dict[str,
             em = _email(ln)
             if em:
                 details["retailer_email"] = em
+        # phone anywhere
+        if not details["retailer_phone"]:
+            ph = _phone(ln)
+            if ph:
+                details["retailer_phone"] = ph
 
     # PASS 2: conversational/full-text fallbacks
     if not details["product"]:
@@ -247,6 +274,8 @@ def extract_order_details(text: str, subject: Optional[str] = None) -> Dict[str,
         details["retailer_address"] = _address(raw)
     if not details["retailer_email"]:
         details["retailer_email"] = _email(raw)
+    if not details["retailer_phone"]:
+        details["retailer_phone"] = _phone(raw)
     if not details["retailer_name"]:
         details["retailer_name"] = _name_conversational(raw) or _name_signature(lines)
     if not details["retailer_name"]:

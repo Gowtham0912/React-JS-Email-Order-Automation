@@ -1,8 +1,8 @@
 import sys, os, imaplib, io, threading, time
-from datetime import date
+from datetime import date, datetime
 import pandas as pd
 from fpdf import FPDF
-from flask import Flask, jsonify, request, session, send_file
+from flask import Flask, jsonify, request, session, send_file, send_from_directory
 from flask_cors import CORS
 
 # ---------------- PATH SETUP ----------------
@@ -24,15 +24,18 @@ def shutdown_session(exception=None):
 # ---------------- AUTO SCAN STATE ----------------
 auto_scan_enabled = False
 auto_scan_thread = None
+is_processing = False  # Flag to track when emails are being processed
 AUTO_SCAN_INTERVAL = 10 
 
 
 # ---------------- AUTO SCAN WORKER ----------------
 def auto_scan_worker(email_user, email_pass):
-    global auto_scan_enabled
+    global auto_scan_enabled, is_processing
     while auto_scan_enabled:
         print("🔄 Automatic scan running...")
+        is_processing = True
         process_emails(email_user, email_pass)
+        is_processing = False
         time.sleep(AUTO_SCAN_INTERVAL)
 
 
@@ -169,7 +172,7 @@ def toggle_auto_scan():
 
 @app.route("/auto-scan-status")
 def auto_scan_status():
-    return jsonify({"auto_scan": auto_scan_enabled})
+    return jsonify({"auto_scan": auto_scan_enabled, "is_processing": is_processing})
 
 
 # ---------------- DELETE ORDER ----------------
@@ -185,6 +188,87 @@ def delete_order(order_id):
         return jsonify({"success": True, "message": "Order deleted"})
 
     return jsonify({"success": False, "message": "Order not found"})
+
+
+# ---------------- RESTORE ORDER (UNDO DELETE) ----------------
+@app.route("/api/orders/restore", methods=["POST"])
+def restore_order():
+    """Restore a previously deleted order - used for undo functionality"""
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    data = request.json
+    
+    try:
+        order = PurchaseOrder(
+            order_number=data.get("order_number"),
+            product_name=data.get("product_name"),
+            quantity_ordered=data.get("quantity_ordered"),
+            unit=data.get("unit"),
+            delivery_due_date=data.get("delivery_due_date"),
+            retailer_name=data.get("retailer_name"),
+            retailer_email=data.get("retailer_email"),
+            retailer_address=data.get("retailer_address"),
+            retailer_phone=data.get("retailer_phone"),
+            priority_level=data.get("priority_level", "Normal"),
+            order_status=data.get("order_status", "Approved"),
+            source_of_order=data.get("source_of_order", "Email"),
+            remarks=data.get("remarks"),
+            confidence_score=data.get("confidence_score", 100.0),
+            extracted_text=data.get("extracted_text"),
+            client_email_subject=data.get("client_email_subject"),
+            attachment_path=data.get("attachment_path")
+        )
+        
+        db_session.add(order)
+        db_session.commit()
+        
+        return jsonify({"success": True, "message": "Order restored successfully", "order_id": order.id})
+    
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ---------------- ADD CUSTOM ORDER ----------------
+@app.route("/api/orders", methods=["POST"])
+def add_custom_order():
+    """Manually add a custom order - only for pythonprojectimap@gmail.com"""
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    # Only allow specific user to add custom orders
+    if session.get("email_user") != "pythonprojectimap@gmail.com":
+        return jsonify({"success": False, "message": "Not authorized to add custom orders"}), 403
+    
+    data = request.json
+    
+    try:
+        order = PurchaseOrder(
+            order_number=f"PO-{int(datetime.utcnow().timestamp())}",
+            product_name=data.get("product_name"),
+            quantity_ordered=data.get("quantity"),
+            unit=data.get("unit"),
+            delivery_due_date=data.get("due_date"),
+            retailer_name=data.get("retailer_name"),
+            retailer_email=data.get("retailer_email"),
+            retailer_address=data.get("address"),
+            retailer_phone=data.get("phone"),
+            priority_level=data.get("priority", "Normal"),
+            order_status="Approved",
+            source_of_order="Manual",
+            remarks=data.get("remarks"),
+            confidence_score=100.0,
+            extracted_text="Manually entered order"
+        )
+        
+        db_session.add(order)
+        db_session.commit()
+        
+        return jsonify({"success": True, "message": "Order added successfully", "order_id": order.id})
+    
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 # ---------------- GET ORDERS (AJAX) ----------------
@@ -209,6 +293,7 @@ def get_orders():
             "retailer_name": o.retailer_name,
             "retailer_email": o.retailer_email,
             "retailer_address": o.retailer_address,
+            "retailer_phone": o.retailer_phone,
             "client_email_subject": o.client_email_subject,
             "order_status": o.order_status,
             "priority_level": o.priority_level,
@@ -218,10 +303,19 @@ def get_orders():
             "unit": o.unit,
             "source_of_order": o.source_of_order,
             "remarks": o.remarks,
-            "extracted_text": o.extracted_text
+            "extracted_text": o.extracted_text,
+            "attachment_path": o.attachment_path
         }
         for o in orders
     ])
+
+
+# ---------------- SERVE ATTACHMENTS ----------------
+@app.route("/attachments/<path:filename>")
+def serve_attachment(filename):
+    """Serve email attachment files"""
+    attachments_dir = os.path.join(BASE_DIR, "extractor", "attachments")
+    return send_from_directory(attachments_dir, filename)
 
 
 # ---------------- EXPORT EXCEL ----------------

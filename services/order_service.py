@@ -44,6 +44,7 @@ def process_emails(email_user, email_pass):
     for mail in emails:
         subject = mail.get("subject", "")
         body = mail.get("body", "")
+        attachment = mail.get("attachment")  # Get attachment filename
 
         email_hash = email_fingerprint(subject, body)
         if is_duplicate(email_hash):
@@ -79,7 +80,8 @@ def process_emails(email_user, email_pass):
             order_status=status,
             confidence_score=confidence,
             priority_level=priority,
-            remarks=", ".join(issues) if issues else None
+            remarks=", ".join(issues) if issues else None,
+            attachment_path=attachment
         )
 
         added += 1

@@ -37,6 +37,7 @@ class PurchaseOrder(Base):
     retailer_name = Column(String)
     retailer_email = Column(String)
     retailer_address = Column(String)
+    retailer_phone = Column(String)  # phone number from email
 
     # ---- AI / NLP ----
     extracted_text = Column(String)         # raw email body
@@ -59,6 +60,9 @@ class PurchaseOrder(Base):
     # ---- Reference ----
     client_email_subject = Column(String)
 
+    # ---- Attachment ----
+    attachment_path = Column(String)  # filename of email attachment
+
 
 Base.metadata.create_all(engine)
 
@@ -71,7 +75,8 @@ def add_order(
     order_status: str,
     confidence_score: float,
     priority_level: str,
-    remarks: str = None
+    remarks: str = None,
+    attachment_path: str = None
 ):
     try:
         order = PurchaseOrder(
@@ -85,6 +90,7 @@ def add_order(
             retailer_name=details.get("retailer_name"),
             retailer_email=details.get("retailer_email"),
             retailer_address=details.get("retailer_address"),
+            retailer_phone=details.get("retailer_phone"),
 
             extracted_text=details.get("raw_text"),
 
@@ -98,7 +104,8 @@ def add_order(
             remarks=remarks,
 
             processed_at=datetime.utcnow(),
-            client_email_subject=subject
+            client_email_subject=subject,
+            attachment_path=attachment_path
         )
 
         session.add(order)
