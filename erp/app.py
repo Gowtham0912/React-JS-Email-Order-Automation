@@ -31,11 +31,26 @@ AUTO_SCAN_INTERVAL = 10
 # ---------------- AUTO SCAN WORKER ----------------
 def auto_scan_worker(email_user, email_pass):
     global auto_scan_enabled, is_processing
+    
+    def set_processing():
+        global is_processing
+        is_processing = True
+    
     while auto_scan_enabled:
         print("🔄 Automatic scan running...")
-        is_processing = True
-        process_emails(email_user, email_pass)
-        is_processing = False
+        try:
+            # Pass callback - is_processing will only be set if emails are actually found
+            added = process_emails(email_user, email_pass, on_processing_start=set_processing)
+            if added > 0:
+                print(f"✅ Processed {added} new order(s)")
+                # Keep indicator visible for at least 3 seconds so frontend can catch it
+                time.sleep(3)
+            else:
+                print("📭 No new emails found")
+        except Exception as e:
+            print(f"Auto scan error: {e}")
+        finally:
+            is_processing = False
         time.sleep(AUTO_SCAN_INTERVAL)
 
 

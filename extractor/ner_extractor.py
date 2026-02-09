@@ -97,6 +97,11 @@ def _phone(text: str) -> Optional[str]:
             phone = m.group(0).strip()
             # Validate it has enough digits
             digits = re.sub(r"\D", "", phone)
+            
+            # Blacklist common placeholders
+            if digits in ["9876543210", "1234567890", "0000000000", "1111111111"]:
+                return None
+                
             if len(digits) >= 10:
                 return phone
     return None

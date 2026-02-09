@@ -6,6 +6,7 @@ const Orders = ({ user, handleLogout }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [autoScan, setAutoScan] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false); // Track if emails are being processed
+    const [showProcessingIndicator, setShowProcessingIndicator] = useState(false); // Debounced indicator
     const [deleteId, setDeleteId] = useState(null);
     const [deletedOrderHistory, setDeletedOrderHistory] = useState([]); // Stack for undo
     const [toast, setToast] = useState(null); // { type: 'no-email' | 'mail-updated', message: '' }
@@ -56,14 +57,42 @@ const Orders = ({ user, handleLogout }) => {
         fetchOrders();
         fetchAutoScanStatus();
 
-        // Poll for new orders every 5 seconds
-        const interval = setInterval(() => {
-            fetchOrders();
+        // Poll for processing status more frequently (every 2 seconds)
+        const statusInterval = setInterval(() => {
             fetchAutoScanStatus();
+        }, 2000);
+
+        // Poll for orders less frequently (every 5 seconds)
+        const ordersInterval = setInterval(() => {
+            fetchOrders();
         }, 5000);
 
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(statusInterval);
+            clearInterval(ordersInterval);
+        };
     }, []);
+
+    // Debounce the processing indicator and show success toast when processing completes
+    const wasProcessingRef = React.useRef(false);
+
+    useEffect(() => {
+        let timer;
+        if (isProcessing) {
+            timer = setTimeout(() => {
+                setShowProcessingIndicator(true);
+                wasProcessingRef.current = true;
+            }, 100); // Short delay to avoid race conditions
+        } else {
+            // If we were processing and now we're not, show success toast
+            if (wasProcessingRef.current) {
+                setToast({ type: "mail-updated", message: "Mail data updated successfully!" });
+                wasProcessingRef.current = false;
+            }
+            setShowProcessingIndicator(false);
+        }
+        return () => clearTimeout(timer);
+    }, [isProcessing]);
 
     const handleScan = async () => {
         setIsLoading(true);
@@ -214,8 +243,8 @@ const Orders = ({ user, handleLogout }) => {
         <div className="font-sans bg-[#fdca5e] text-center m-0 min-h-screen">
             <Navbar user={user} handleLogout={handleLogout} />
 
-            {/* Status Message (Toast) */}
-            <div className="relative h-10">
+            {/* Status Message (Toast) and Processing Indicator - share same position */}
+            <div className="relative">
                 {toast && (
                     <span className="absolute left-1/2 transform -translate-x-1/2 inline-flex items-center gap-2 font-semibold mt-2 bg-white px-5 py-2 rounded-3xl shadow-lg transition-all duration-500 animate-pop z-50">
                         {toast.type === "no-email" ? (
@@ -249,6 +278,16 @@ const Orders = ({ user, handleLogout }) => {
                         )}
                     </span>
                 )}
+                {/* Processing Indicator - shows in same position when no toast */}
+                {showProcessingIndicator && !isLoading && !toast && (
+                    <span className="absolute left-1/2 transform -translate-x-1/2 inline-flex items-center gap-2 font-semibold mt-2 bg-white px-5 py-2 rounded-3xl shadow-lg transition-all duration-500 animate-pop z-50">
+                        <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-blue-600">New mail is under processing...</span>
+                    </span>
+                )}
             </div>
 
             {/* Loading Indicator */}
@@ -259,21 +298,8 @@ const Orders = ({ user, handleLogout }) => {
                 </div>
             )}
 
-            {/* Processing Indicator - shows when auto-scan is processing emails */}
-            {isProcessing && !isLoading && (
-                <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 animate-pulse">
-                    <div className="flex items-center gap-2 bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded-full shadow-lg">
-                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span className="font-medium text-sm">New mail is under processing...</span>
-                    </div>
-                </div>
-            )}
-
             {/* Controls */}
-            <div className="w-[95%] h-12 mx-auto flex justify-between items-center relative mt-6">
+            <div className="w-[95%] h-12 mx-auto flex justify-between items-center relative mt-5">
                 {/* Left: Scan Controls */}
                 <div className="flex items-center gap-4">
                     {!autoScan && (
@@ -457,12 +483,14 @@ const Orders = ({ user, handleLogout }) => {
                                                 </div>
                                                 <div className="flex">
                                                     <span className="text-gray-500 w-24 flex-shrink-0">Address:</span>
-                                                    <span className="text-black">{order.retailer_address || '-'}</span>
+                                                    <span className={order.retailer_address && order.retailer_address.trim() ? "text-black" : "text-gray-400 italic"}>
+                                                        {order.retailer_address && order.retailer_address.trim() ? order.retailer_address : 'Not Provided'}
+                                                    </span>
                                                 </div>
                                                 <div className="flex">
                                                     <span className="text-gray-500 w-24 flex-shrink-0">Phone:</span>
-                                                    <span className={order.retailer_phone ? "text-black" : "text-gray-400 italic"}>
-                                                        {order.retailer_phone || 'Not Provided'}
+                                                    <span className={order.retailer_phone && order.retailer_phone.trim() ? "text-black" : "text-gray-400 italic"}>
+                                                        {order.retailer_phone && order.retailer_phone.trim() ? order.retailer_phone : 'Not Provided'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -471,8 +499,8 @@ const Orders = ({ user, handleLogout }) => {
                                         {/* Column 2: Extracted Email Data */}
                                         <div className="col-span-6 bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
                                             <h4 className="text-black font-semibold mb-2 text-base">Extracted Email Data</h4>
-                                            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 max-h-40 overflow-y-auto text-left">
-                                                <pre className="text-xs text-black whitespace-pre-wrap font-mono leading-relaxed">{(order.extracted_text || 'No extracted data available.').trim()}</pre>
+                                            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 max-h-48 overflow-y-auto text-left">
+                                                <pre className="text-xs text-black whitespace-pre-wrap font-mono leading-4">{(order.extracted_text || 'No extracted data available.').trim()}</pre>
                                             </div>
                                         </div>
 
@@ -708,12 +736,21 @@ const Orders = ({ user, handleLogout }) => {
           }
           
           @keyframes popUp {
-            0% { opacity: 0; transform: translate(-50%, 20px) scale(0.8); }
-            50% { opacity: 1; transform: translate(-50%, -4px) scale(1.05); }
-            100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+            0% { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.8); }
+            50% { opacity: 1; transform: translateX(-50%) translateY(-4px) scale(1.05); }
+            100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
           }
           .animate-pop {
             animation: popUp 0.6s ease-out;
+          }
+          
+          @keyframes processingPop {
+            0% { opacity: 0; transform: translateY(20px) scale(0.8); }
+            50% { opacity: 1; transform: translateY(-4px) scale(1.05); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          .animate-processing {
+            animation: processingPop 0.6s ease-out;
           }
           
           /* Hide scrollbar for Chrome, Safari and Opera */

@@ -30,14 +30,21 @@ def detect_priority(text: str) -> str:
 
 
 # ---------------- CORE PIPELINE ----------------
-def process_emails(email_user, email_pass):
+def process_emails(email_user, email_pass, on_processing_start=None):
     """
     ERP Pipeline:
     Fetch → Extract → Validate → Score → Save
+    
+    Args:
+        on_processing_start: Optional callback called when emails are found and processing begins
     """
     emails = fetch_emails(email_user, email_pass)
     if not emails:
         return 0
+    
+    # Notify that processing is starting (only when we actually have emails)
+    if on_processing_start:
+        on_processing_start()
 
     added = 0
 
