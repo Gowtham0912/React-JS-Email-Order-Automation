@@ -1,11 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import Navbar from "./Navbar";
+import Sidebar from "./Sidebar";
 
 const Analytics = ({ user, handleLogout }) => {
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     return (
         <div className="bg-[#fdca5e] font-sans h-screen overflow-hidden">
             <div className="h-full overflow-y-auto no-scrollbar">
-                <Navbar user={user} handleLogout={handleLogout} />
+                <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+                <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
                 <div className="max-w-[95%] mx-auto mt-10">
                     <div className="bg-white rounded-xl p-8 shadow-lg text-center">

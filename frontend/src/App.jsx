@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
@@ -6,12 +6,13 @@ import Orders from "./components/Orders";
 import Analytics from "./components/Analytics";
 import Contact from "./components/Contact";
 import About from "./components/About";
+import Trash from "./components/Trash";
 
 function App() {
-  const [user, setUser] = useState(localStorage.getItem("email_user") || null);
+  const [user, setUser] = useState(sessionStorage.getItem("email_user") || null);
 
   const setLoginUser = (email) => {
-    localStorage.setItem("email_user", email);
+    sessionStorage.setItem("email_user", email);
     setUser(email);
   };
 
@@ -21,7 +22,7 @@ function App() {
     } catch (e) {
       console.error(e);
     }
-    localStorage.removeItem("email_user");
+    sessionStorage.removeItem("email_user");
     setUser(null);
   };
 
@@ -60,6 +61,10 @@ function App() {
         <Route
           path="/about"
           element={user ? <About user={user} handleLogout={handleLogout} /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/trash"
+          element={user ? <Trash user={user} handleLogout={handleLogout} /> : <Navigate to="/" />}
         />
       </Routes>
     </Router>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
+import Sidebar from "./Sidebar";
 
 const Orders = ({ user, handleLogout }) => {
     const [orders, setOrders] = useState([]);
@@ -11,6 +12,12 @@ const Orders = ({ user, handleLogout }) => {
     const [deletedOrderHistory, setDeletedOrderHistory] = useState([]); // Stack for undo
     const [toast, setToast] = useState(null); // { type: 'no-email' | 'mail-updated', message: '' }
     const [expandedRow, setExpandedRow] = useState(null);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [sortField, setSortField] = useState("id");
+    const [sortDirection, setSortDirection] = useState("desc");
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
     const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [newOrder, setNewOrder] = useState({
@@ -143,19 +150,15 @@ const Orders = ({ user, handleLogout }) => {
     const handleDelete = async () => {
         if (!deleteId) return;
 
-        // Find and save the order before deleting (for undo)
-        const orderToDelete = orders.find(o => o.id === deleteId);
-
         try {
             const res = await fetch(`${API_URL}/delete/${deleteId}`, { method: "DELETE", credentials: "include" });
             const result = await res.json();
             if (result.success) {
-                // Save to undo history
-                if (orderToDelete) {
-                    setDeletedOrderHistory(prev => [...prev, orderToDelete]);
-                }
-                setToast({ type: "deleted", message: "Order deleted. Press Ctrl+Z to undo." });
+                // Save the ID for undo (soft-delete, so we just need the ID to restore)
+                setDeletedOrderHistory(prev => [...prev, deleteId]);
+                setToast({ type: "deleted", message: "Order moved to trash. Press Ctrl+Z to undo." });
                 fetchOrders();
+                setSelectedIds(prev => { const next = new Set(prev); next.delete(deleteId); return next; });
             }
         } catch (err) {
             console.error("Delete error:", err);
@@ -164,17 +167,15 @@ const Orders = ({ user, handleLogout }) => {
         }
     };
 
-    // Handle undo (Ctrl+Z)
+    // Handle undo (Ctrl+Z) - restores soft-deleted order
     const handleUndo = async () => {
         if (deletedOrderHistory.length === 0) return;
 
-        const lastDeleted = deletedOrderHistory[deletedOrderHistory.length - 1];
+        const lastDeletedId = deletedOrderHistory[deletedOrderHistory.length - 1];
 
         try {
-            const res = await fetch(`${API_URL}/api/orders/restore`, {
+            const res = await fetch(`${API_URL}/api/trash/restore/${lastDeletedId}`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(lastDeleted),
                 credentials: "include",
             });
             const result = await res.json();
@@ -241,7 +242,8 @@ const Orders = ({ user, handleLogout }) => {
 
     return (
         <div className="font-sans bg-[#fdca5e] text-center m-0 min-h-screen">
-            <Navbar user={user} handleLogout={handleLogout} />
+            <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+            <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             {/* Status Message (Toast) and Processing Indicator - share same position */}
             <div className="relative">
@@ -365,19 +367,144 @@ const Orders = ({ user, handleLogout }) => {
                 </div>
             </div>
 
+            {/* Search & Sort Bar */}
+            <div className="w-[95%] mx-auto flex items-center gap-3 mt-4">
+                {/* Search */}
+                <div className="relative flex-1 max-w-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Search orders by product, retailer, email, status..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 shadow-sm"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+
+                {/* Sort */}
+                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-gray-500">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5-3L16.5 18m0 0L12 13.5m4.5 4.5V4.5" />
+                    </svg>
+                    <select
+                        value={sortField}
+                        onChange={(e) => setSortField(e.target.value)}
+                        className="text-sm text-gray-700 bg-transparent border-none outline-none cursor-pointer"
+                    >
+                        <option value="id">Order ID</option>
+                        <option value="product_name">Product Name</option>
+                        <option value="quantity_ordered">Quantity</option>
+                        <option value="delivery_due_date">Due Date</option>
+                        <option value="retailer_name">Retailer Name</option>
+                        <option value="retailer_email">Retailer Email</option>
+                        <option value="order_status">Status</option>
+                        <option value="priority_level">Priority</option>
+                        <option value="confidence_score">Confidence</option>
+                    </select>
+                    <button
+                        onClick={() => setSortDirection(prev => prev === "asc" ? "desc" : "asc")}
+                        className="p-1 rounded hover:bg-gray-100 transition text-gray-500"
+                        title={sortDirection === "asc" ? "Ascending" : "Descending"}
+                    >
+                        {sortDirection === "asc" ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                        ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        )}
+                    </button>
+                </div>
+
+                {/* Results count */}
+                {searchQuery && (
+                    <span className="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-300">
+                        {orders.filter(o => {
+                            const q = searchQuery.toLowerCase();
+                            return (
+                                (o.product_name || "").toLowerCase().includes(q) ||
+                                (o.retailer_name || "").toLowerCase().includes(q) ||
+                                (o.retailer_email || "").toLowerCase().includes(q) ||
+                                (o.retailer_address || "").toLowerCase().includes(q) ||
+                                (o.client_email_subject || "").toLowerCase().includes(q) ||
+                                (o.order_status || "").toLowerCase().includes(q) ||
+                                (o.priority_level || "").toLowerCase().includes(q) ||
+                                String(o.id).includes(q) ||
+                                (o.quantity_ordered || "").toLowerCase().includes(q)
+                            );
+                        }).length} result(s) found
+                    </span>
+                )}
+            </div>
+
+            {/* Bulk Action Bar */}
+            {selectedIds.size > 0 && (
+                <div className="w-[95%] mx-auto mt-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-2.5 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-2 text-sm text-amber-800 font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        {selectedIds.size} order(s) selected
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setSelectedIds(new Set())}
+                            className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1.5 rounded-md hover:bg-gray-100 transition"
+                        >Clear Selection</button>
+                        <button
+                            onClick={() => setShowBulkDeleteConfirm(true)}
+                            className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-1.5 rounded-md transition"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                            Delete Selected
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Orders Table */}
-            <div className="mt-6 w-[95%] mx-auto bg-white rounded-lg shadow-md border border-gray-300 px-3 pt-3 mb-15">
+            <div className="mt-3 w-[95%] mx-auto bg-white rounded-lg shadow-md border border-gray-300 px-3 pt-3 mb-15">
                 {/* Header row */}
                 <div className="bg-[#7c5327] text-white font-semibold py-3 px-4 rounded-md text-sm sticky top-0 z-10">
                     <div className="flex">
+                        <div className="w-[3%] flex items-center">
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 accent-amber-400 cursor-pointer"
+                                checked={selectedIds.size > 0 && orders.length > 0 && selectedIds.size === orders.length}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setSelectedIds(new Set(orders.map(o => o.id)));
+                                    } else {
+                                        setSelectedIds(new Set());
+                                    }
+                                }}
+                            />
+                        </div>
                         <div className="w-[5%]">Order ID</div>
-                        <div className="w-[12%]">Product Name</div>
+                        <div className="w-[11%]">Product Name</div>
                         <div className="w-[6%]">Quantity</div>
                         <div className="w-[8%]">Due Date</div>
                         <div className="w-[10%]">Retailer Name</div>
                         <div className="w-[12%]">Retailer Email</div>
-                        <div className="w-[14%]">Retailer Address</div>
-                        <div className="w-[14%]">Email Subject</div>
+                        <div className="w-[13%]">Retailer Address</div>
+                        <div className="w-[13%]">Email Subject</div>
                         <div className="w-[6%]">Status</div>
                         <div className="w-[5%]">Priority</div>
                         <div className="w-[5%]">Confidence</div>
@@ -387,164 +514,253 @@ const Orders = ({ user, handleLogout }) => {
 
                 {/* Scrollable Rows */}
                 <div className="divide-y divide-gray-200 overflow-y-auto max-h-[60vh] no-scrollbar">
-                    {orders.map((order) => (
-                        <React.Fragment key={order.id}>
-                            <div className="flex items-center py-3 px-4 hover:bg-gray-50 text-sm text-gray-900">
-                                <div className="w-[5%]">{order.id}</div>
-                                <div className="w-[12%] truncate">{order.product_name}</div>
-                                <div className="w-[6%]">{order.quantity_ordered}</div>
-                                <div className="w-[8%]">{order.delivery_due_date}</div>
-                                <div className="w-[10%] truncate">{order.retailer_name}</div>
-                                <div className="w-[12%] truncate">{order.retailer_email}</div>
-                                <div className="w-[14%] truncate">{order.retailer_address}</div>
-                                <div className="w-[14%] truncate">{order.source_of_order === 'Manual' ? <span className="text-gray-500 italic">Manual Entry</span> : order.client_email_subject}</div>
+                    {orders
+                        .filter(order => {
+                            if (!searchQuery) return true;
+                            const q = searchQuery.toLowerCase();
+                            return (
+                                (order.product_name || "").toLowerCase().includes(q) ||
+                                (order.retailer_name || "").toLowerCase().includes(q) ||
+                                (order.retailer_email || "").toLowerCase().includes(q) ||
+                                (order.retailer_address || "").toLowerCase().includes(q) ||
+                                (order.client_email_subject || "").toLowerCase().includes(q) ||
+                                (order.order_status || "").toLowerCase().includes(q) ||
+                                (order.priority_level || "").toLowerCase().includes(q) ||
+                                String(order.id).includes(q) ||
+                                (order.quantity_ordered || "").toLowerCase().includes(q)
+                            );
+                        })
+                        .sort((a, b) => {
+                            let valA = a[sortField];
+                            let valB = b[sortField];
+                            // Handle numeric fields
+                            if (sortField === "id" || sortField === "confidence_score") {
+                                valA = Number(valA) || 0;
+                                valB = Number(valB) || 0;
+                            } else {
+                                valA = String(valA || "").toLowerCase();
+                                valB = String(valB || "").toLowerCase();
+                            }
+                            if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+                            if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+                            return 0;
+                        })
+                        .map((order) => (
+                            <React.Fragment key={order.id}>
+                                <div className={`flex items-center py-3 px-4 hover:bg-gray-50 text-sm text-gray-900 ${selectedIds.has(order.id) ? 'bg-amber-50' : ''}`}>
+                                    <div className="w-[3%] flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 accent-amber-500 cursor-pointer"
+                                            checked={selectedIds.has(order.id)}
+                                            onChange={(e) => {
+                                                setSelectedIds(prev => {
+                                                    const next = new Set(prev);
+                                                    if (e.target.checked) next.add(order.id);
+                                                    else next.delete(order.id);
+                                                    return next;
+                                                });
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="w-[5%]">{order.id}</div>
+                                    <div className="w-[11%] truncate">{order.product_name}</div>
+                                    <div className="w-[6%]">{order.quantity_ordered}</div>
+                                    <div className="w-[8%]">{order.delivery_due_date}</div>
+                                    <div className="w-[10%] truncate">{order.retailer_name}</div>
+                                    <div className="w-[12%] truncate">{order.retailer_email}</div>
+                                    <div className="w-[13%] truncate">{order.retailer_address}</div>
+                                    <div className="w-[13%] truncate">{order.source_of_order === 'Manual' ? <span className="text-gray-500 italic">Manual Entry</span> : order.client_email_subject}</div>
 
-                                {/* Status */}
-                                <div className="w-[6%]">
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.order_status === 'Approved' ? 'bg-green-200 text-green-800' :
-                                        order.order_status === 'Needs Review' ? 'bg-yellow-200 text-yellow-800' :
-                                            'bg-red-200 text-red-800'
-                                        }`}>
-                                        {order.order_status}
-                                    </span>
+                                    {/* Status */}
+                                    <div className="w-[6%]">
+                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.order_status === 'Approved' ? 'bg-green-200 text-green-800' :
+                                            order.order_status === 'Needs Review' ? 'bg-yellow-200 text-yellow-800' :
+                                                'bg-red-200 text-red-800'
+                                            }`}>
+                                            {order.order_status}
+                                        </span>
+                                    </div>
+
+                                    {/* Priority */}
+                                    <div className="w-[5%]">
+                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.priority_level === 'Urgent' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-800'
+                                            }`}>
+                                            {order.priority_level}
+                                        </span>
+                                    </div>
+
+                                    {/* Confidence */}
+                                    <div className="w-[5%]">
+                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.confidence_score < 70 ? 'bg-red-200 text-red-800' :
+                                            order.confidence_score < 85 ? 'bg-yellow-200 text-yellow-800' :
+                                                'bg-green-200 text-green-800'
+                                            }`}>
+                                            {order.confidence_score}%
+                                        </span>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="w-[3%] flex justify-center">
+                                        <button
+                                            onClick={() => setExpandedRow(expandedRow === order.id ? null : order.id)}
+                                            className="bg-gray-200 hover:bg-gray-300 px-2 rounded"
+                                        >
+                                            ▼
+                                        </button>
+                                        <button
+                                            onClick={() => setDeleteId(order.id)}
+                                            className="bg-transparent hover:bg-red-100 p-1.5 rounded transition"
+                                            title="Delete Order"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#dc3545" className="w-5 h-5">
+                                                <path d="M5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6zm3 2v10h2V8H8zm6 0v10h2V8h-2zM9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1zm-5 2h16v1H4V5z" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
 
-                                {/* Priority */}
-                                <div className="w-[5%]">
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.priority_level === 'Urgent' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-800'
-                                        }`}>
-                                        {order.priority_level}
-                                    </span>
-                                </div>
-
-                                {/* Confidence */}
-                                <div className="w-[5%]">
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.confidence_score < 70 ? 'bg-red-200 text-red-800' :
-                                        order.confidence_score < 85 ? 'bg-yellow-200 text-yellow-800' :
-                                            'bg-green-200 text-green-800'
-                                        }`}>
-                                        {order.confidence_score}%
-                                    </span>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="w-[3%] flex justify-center">
-                                    <button
-                                        onClick={() => setExpandedRow(expandedRow === order.id ? null : order.id)}
-                                        className="bg-gray-200 hover:bg-gray-300 px-2 rounded"
-                                    >
-                                        ▼
-                                    </button>
-                                    <button
-                                        onClick={() => setDeleteId(order.id)}
-                                        className="bg-transparent hover:bg-red-100 p-1.5 rounded transition"
-                                        title="Delete Order"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#dc3545" className="w-5 h-5">
-                                            <path d="M5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6zm3 2v10h2V8H8zm6 0v10h2V8h-2zM9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1zm-5 2h16v1H4V5z" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Expanded Details */}
-                            {expandedRow === order.id && (
-                                <div className="bg-gray-50 px-6 py-3 text-sm text-gray-900 border-t border-gray-200">
-                                    <div className="grid grid-cols-12 gap-4">
-                                        {/* Column 1: Order Details */}
-                                        <div className="col-span-3 bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
-                                            <h4 className="text-black font-semibold mb-2 text-base">Order Details</h4>
-                                            <div className="space-y-1 text-left text-gray-700">
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Order Number:</span>
-                                                    <span className="text-black font-medium">{order.order_number || '-'}</span>
-                                                </div>
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Created At:</span>
-                                                    <span className="text-black">{order.created_at || '-'}</span>
-                                                </div>
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Processed At:</span>
-                                                    <span className="text-black">{order.processed_at || '-'}</span>
-                                                </div>
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Unit:</span>
-                                                    <span>{order.unit || '-'}</span>
-                                                </div>
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Source:</span>
-                                                    <span className="text-black">{order.source_of_order || '-'}</span>
-                                                </div>
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Remarks:</span>
-                                                    <span className={order.remarks && order.remarks.toLowerCase().includes('missing') ? 'text-red-500' : ''}>
-                                                        {order.remarks || '—'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Address:</span>
-                                                    <span className={order.retailer_address && order.retailer_address.trim() ? "text-black" : "text-gray-400 italic"}>
-                                                        {order.retailer_address && order.retailer_address.trim() ? order.retailer_address : 'Not Provided'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex">
-                                                    <span className="text-gray-500 w-24 flex-shrink-0">Phone:</span>
-                                                    <span className={order.retailer_phone && order.retailer_phone.trim() ? "text-black" : "text-gray-400 italic"}>
-                                                        {order.retailer_phone && order.retailer_phone.trim() ? order.retailer_phone : 'Not Provided'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Column 2: Extracted Email Data */}
-                                        <div className="col-span-6 bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
-                                            <h4 className="text-black font-semibold mb-2 text-base">Extracted Email Data</h4>
-                                            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 max-h-48 overflow-y-auto text-left">
-                                                <pre className="text-xs text-black whitespace-pre-wrap font-mono leading-4">{(order.extracted_text || 'No extracted data available.').trim()}</pre>
-                                            </div>
-                                        </div>
-
-                                        {/* Column 3: Attachment */}
-                                        <div className="col-span-3 bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
-                                            <h4 className="text-black font-semibold mb-2 text-base">Attachment</h4>
-                                            <div className="flex flex-col items-center justify-center h-28">
-                                                {order.attachment_path ? (
-                                                    <a
-                                                        href={`${API_URL}/attachments/${order.attachment_path}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="flex flex-col items-center text-blue-600 hover:text-blue-800 transition-colors"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-12 h-12 mb-2">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                                                        </svg>
-                                                        <span className="text-sm font-medium">View File</span>
-                                                    </a>
-                                                ) : (
-                                                    <div className="flex flex-col items-center text-gray-400">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-12 h-12 mb-2">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                                                        </svg>
-                                                        <span className="text-sm">No Attachment</span>
+                                {/* Expanded Details */}
+                                {expandedRow === order.id && (
+                                    <div className="bg-gray-50 px-6 py-3 text-sm text-gray-900 border-t border-gray-200">
+                                        <div className="grid grid-cols-12 gap-4">
+                                            {/* Column 1: Order Details */}
+                                            <div className="col-span-3 bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
+                                                <h4 className="text-black font-semibold mb-2 text-base">Order Details</h4>
+                                                <div className="space-y-1 text-left text-gray-700">
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Order Number:</span>
+                                                        <span className="text-black font-medium">{order.order_number || '-'}</span>
                                                     </div>
-                                                )}
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Created At:</span>
+                                                        <span className="text-black">{order.created_at || '-'}</span>
+                                                    </div>
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Processed At:</span>
+                                                        <span className="text-black">{order.processed_at || '-'}</span>
+                                                    </div>
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Unit:</span>
+                                                        <span>{order.unit || '-'}</span>
+                                                    </div>
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Source:</span>
+                                                        <span className="text-black">{order.source_of_order || '-'}</span>
+                                                    </div>
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Remarks:</span>
+                                                        <span className={order.remarks && order.remarks.toLowerCase().includes('missing') ? 'text-red-500' : ''}>
+                                                            {order.remarks || '—'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Address:</span>
+                                                        <span className={order.retailer_address && order.retailer_address.trim() ? "text-black" : "text-gray-400 italic"}>
+                                                            {order.retailer_address && order.retailer_address.trim() ? order.retailer_address : 'Not Provided'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex">
+                                                        <span className="text-gray-500 w-24 flex-shrink-0">Phone:</span>
+                                                        <span className={order.retailer_phone && order.retailer_phone.trim() ? "text-black" : "text-gray-400 italic"}>
+                                                            {order.retailer_phone && order.retailer_phone.trim() ? order.retailer_phone : 'Not Provided'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Column 2: Extracted Email Data */}
+                                            <div className="col-span-6 bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
+                                                <h4 className="text-black font-semibold mb-2 text-base">Extracted Email Data</h4>
+                                                <div className="bg-gray-50 border border-gray-200 rounded-md p-3 max-h-48 overflow-y-auto text-left">
+                                                    <pre className="text-xs text-black whitespace-pre-wrap font-mono leading-4">{(order.extracted_text || 'No extracted data available.').trim()}</pre>
+                                                </div>
+                                            </div>
+
+                                            {/* Column 3: Attachment */}
+                                            <div className="col-span-3 bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
+                                                <h4 className="text-black font-semibold mb-2 text-base">Attachment</h4>
+                                                <div className="flex flex-col items-center justify-center h-28">
+                                                    {order.attachment_path ? (
+                                                        <a
+                                                            href={`${API_URL}/attachments/${order.attachment_path}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex flex-col items-center text-blue-600 hover:text-blue-800 transition-colors"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-12 h-12 mb-2">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                                                            </svg>
+                                                            <span className="text-sm font-medium">View File</span>
+                                                        </a>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center text-gray-400">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-12 h-12 mb-2">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                                                            </svg>
+                                                            <span className="text-sm">No Attachment</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            )}
-                        </React.Fragment>
-                    ))}
+                                )}
+                            </React.Fragment>
+                        ))}
                 </div>
             </div>
 
             {/* Delete Confirmation Modal */}
             {deleteId && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
-                    <div className="bg-white rounded-xl shadow-lg p-6 w-[350px] text-center">
-                        <h3 className="text-lg font-semibold mb-4">Are you sure you want to delete this order?</h3>
-                        <button onClick={handleDelete} className="bg-[#7c5327] hover:bg-black text-white px-4 py-2 rounded-md mx-2 font-medium transition">Yes, Delete</button>
+                    <div className="bg-white rounded-xl shadow-lg p-6 w-[380px] text-center">
+                        <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-7 h-7 text-amber-600">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold mb-2">Move to Trash?</h3>
+                        <p className="text-sm text-gray-500 mb-4">This order will be moved to Trash and stored for <strong>30 days</strong>. You can restore it anytime from the Trash page.</p>
+                        <button onClick={handleDelete} className="bg-[#7c5327] hover:bg-black text-white px-4 py-2 rounded-md mx-2 font-medium transition">Yes, Move to Trash</button>
                         <button onClick={() => setDeleteId(null)} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md mx-2 font-medium transition">Cancel</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk Delete Confirmation Modal */}
+            {showBulkDeleteConfirm && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
+                    <div className="bg-white rounded-xl shadow-lg p-6 w-[400px] text-center">
+                        <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-7 h-7 text-amber-600">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold mb-2">Move {selectedIds.size} order(s) to Trash?</h3>
+                        <p className="text-sm text-gray-500 mb-4">Selected orders will be moved to Trash and stored for <strong>30 days</strong>. You can restore them anytime from the Trash page.</p>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const res = await fetch(`${API_URL}/api/bulk-delete`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+                                        credentials: "include",
+                                    });
+                                    const result = await res.json();
+                                    if (result.success) {
+                                        setToast({ type: "deleted", message: result.message });
+                                        setDeletedOrderHistory(prev => [...prev, ...Array.from(selectedIds)]);
+                                        setSelectedIds(new Set());
+                                        fetchOrders();
+                                    }
+                                } catch (err) { console.error("Bulk delete error:", err); }
+                                setShowBulkDeleteConfirm(false);
+                            }}
+                            className="bg-[#7c5327] hover:bg-black text-white px-4 py-2 rounded-md mx-2 font-medium transition"
+                        >Yes, Move to Trash</button>
+                        <button onClick={() => setShowBulkDeleteConfirm(false)} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md mx-2 font-medium transition">Cancel</button>
                     </div>
                 </div>
             )}

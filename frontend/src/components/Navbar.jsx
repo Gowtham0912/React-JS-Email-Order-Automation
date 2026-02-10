@@ -1,13 +1,23 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 
-const Navbar = ({ user, handleLogout }) => {
+const Navbar = ({ user, handleLogout, sidebarOpen, setSidebarOpen }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
     <div className="bg-white text-white px-4 py-3 flex items-center mx-5 mt-5 rounded-2xl relative">
-      {/* LEFT : Logo */}
+      {/* LEFT : Hamburger + Logo */}
       <div className="flex items-center space-x-3">
+        {/* Hamburger Button */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition"
+          title="Menu"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="#7c5327" className="w-6 h-6">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
         <img src="/static/logo.png" alt="Logo" className="w-12 object-contain" />
         <h1 className="m-0 text-black font-bold text-2xl">OrderIQ</h1>
       </div>

@@ -63,6 +63,9 @@ class PurchaseOrder(Base):
     # ---- Attachment ----
     attachment_path = Column(String)  # filename of email attachment
 
+    # ---- Soft Delete ----
+    deleted_at = Column(DateTime, nullable=True, default=None)
+
 
 Base.metadata.create_all(engine)
 

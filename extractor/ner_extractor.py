@@ -82,14 +82,17 @@ def _email(text: str) -> Optional[str]:
     return m.group(0) if m else None
 
 def _phone(text: str) -> Optional[str]:
-    """Extract phone numbers from text - supports various formats."""
+    """Extract phone numbers from text - supports various formats including Indian mobile."""
     if not text:
         return None
-    # Patterns for phone numbers: +91 XXXXX XXXXX, (XXX) XXX-XXXX, XXX-XXX-XXXX, XXXXXXXXXX
+    # Patterns for phone numbers - ordered from most specific to least
     patterns = [
-        r"\+?\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,5}[\s.-]?\d{3,5}",  # International format
-        r"\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}",  # US format (XXX) XXX-XXXX
-        r"\d{10,12}",  # Simple 10-12 digit number
+        r"\+?91[\s.-]?\d{5}[\s.-]?\d{5}",                       # Indian: +91 98765 43210
+        r"\+?91[\s.-]?\d{10}",                                    # Indian: +919876543210
+        r"\+?\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,5}[\s.-]?\d{3,5}",  # International
+        r"\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}",                  # US format (XXX) XXX-XXXX
+        r"\d{5}[\s.-]?\d{5}",                                     # Indian: 98765 43210
+        r"\d{10,12}",                                              # Simple 10-12 digit number
     ]
     for pat in patterns:
         m = re.search(pat, text)
@@ -102,8 +105,25 @@ def _phone(text: str) -> Optional[str]:
             if digits in ["9876543210", "1234567890", "0000000000", "1111111111"]:
                 return None
                 
-            if len(digits) >= 10:
+            if len(digits) >= 7:
                 return phone
+    return None
+
+
+def _phone_from_labeled_line(text: str) -> Optional[str]:
+    """Extract phone from labeled lines like 'Phone: 98765 43210' or 'Mobile No: +919876543210'."""
+    if not text:
+        return None
+    m = re.search(
+        r"(?:phone|mobile|cell|contact\s*no\.?|tel\.?|call|mob\.?|ph\.?)\s*(?:no\.?|number|num\.?)?\s*[:\-–—=]?\s*"
+        r"(\+?\d[\d\s\.\-\(\)]{6,16}\d)",
+        text, re.I
+    )
+    if m:
+        phone = m.group(1).strip()
+        digits = re.sub(r"\D", "", phone)
+        if digits not in ["9876543210", "1234567890", "0000000000", "1111111111"] and len(digits) >= 7:
+            return phone
     return None
 
 def _strict_parse_date(fragment: str) -> Optional[str]:
@@ -280,7 +300,7 @@ def extract_order_details(text: str, subject: Optional[str] = None) -> Dict[str,
     if not details["retailer_email"]:
         details["retailer_email"] = _email(raw)
     if not details["retailer_phone"]:
-        details["retailer_phone"] = _phone(raw)
+        details["retailer_phone"] = _phone_from_labeled_line(raw) or _phone(raw)
     if not details["retailer_name"]:
         details["retailer_name"] = _name_conversational(raw) or _name_signature(lines)
     if not details["retailer_name"]:

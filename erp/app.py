@@ -1,5 +1,5 @@
 import sys, os, imaplib, io, threading, time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import pandas as pd
 from fpdf import FPDF
 from flask import Flask, jsonify, request, session, send_file, send_from_directory
@@ -190,7 +190,7 @@ def auto_scan_status():
     return jsonify({"auto_scan": auto_scan_enabled, "is_processing": is_processing})
 
 
-# ---------------- DELETE ORDER ----------------
+# ---------------- DELETE ORDER (SOFT DELETE) ----------------
 @app.route("/delete/<int:order_id>", methods=["DELETE"])
 def delete_order(order_id):
     if "email_user" not in session:
@@ -198,9 +198,9 @@ def delete_order(order_id):
 
     order = db_session.query(PurchaseOrder).get(order_id)
     if order:
-        db_session.delete(order)
+        order.deleted_at = datetime.utcnow()
         db_session.commit()
-        return jsonify({"success": True, "message": "Order deleted"})
+        return jsonify({"success": True, "message": "Order moved to trash"})
 
     return jsonify({"success": False, "message": "Order not found"})
 
@@ -291,11 +291,11 @@ def add_custom_order():
 def get_orders():
     # Debug session on every request
     print(f"DEBUG: Session keys: {list(session.keys())}")
-    
-    # if "email_user" not in session:
-    #     return jsonify([])
 
-    orders = db_session.query(PurchaseOrder).order_by(
+    # Only return orders that are NOT soft-deleted
+    orders = db_session.query(PurchaseOrder).filter(
+        PurchaseOrder.deleted_at.is_(None)
+    ).order_by(
         PurchaseOrder.created_at.desc()
     ).all()
 
@@ -323,6 +323,135 @@ def get_orders():
         }
         for o in orders
     ])
+
+
+# ---------------- TRASH ENDPOINTS ----------------
+@app.route("/api/trash")
+def get_trash():
+    """Get all soft-deleted orders still within the 30-day window"""
+    cutoff = datetime.utcnow() - timedelta(days=30)
+
+    # Permanently remove orders older than 30 days
+    expired = db_session.query(PurchaseOrder).filter(
+        PurchaseOrder.deleted_at.isnot(None),
+        PurchaseOrder.deleted_at < cutoff
+    ).all()
+    for o in expired:
+        db_session.delete(o)
+    if expired:
+        db_session.commit()
+
+    # Return remaining trashed orders
+    orders = db_session.query(PurchaseOrder).filter(
+        PurchaseOrder.deleted_at.isnot(None)
+    ).order_by(PurchaseOrder.deleted_at.desc()).all()
+
+    return jsonify([
+        {
+            "id": o.id,
+            "product_name": o.product_name,
+            "quantity_ordered": o.quantity_ordered,
+            "delivery_due_date": o.delivery_due_date,
+            "retailer_name": o.retailer_name,
+            "retailer_email": o.retailer_email,
+            "order_status": o.order_status,
+            "priority_level": o.priority_level,
+            "confidence_score": o.confidence_score,
+            "deleted_at": str(o.deleted_at) if o.deleted_at else None,
+            "days_remaining": max(0, 30 - (datetime.utcnow() - o.deleted_at).days) if o.deleted_at else 0
+        }
+        for o in orders
+    ])
+
+
+@app.route("/api/trash/restore/<int:order_id>", methods=["POST"])
+def restore_from_trash(order_id):
+    """Restore a soft-deleted order"""
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    order = db_session.query(PurchaseOrder).get(order_id)
+    if order and order.deleted_at is not None:
+        order.deleted_at = None
+        db_session.commit()
+        return jsonify({"success": True, "message": "Order restored successfully"})
+
+    return jsonify({"success": False, "message": "Order not found in trash"})
+
+
+@app.route("/api/trash/<int:order_id>", methods=["DELETE"])
+def permanent_delete(order_id):
+    """Permanently delete an order from trash"""
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    order = db_session.query(PurchaseOrder).get(order_id)
+    if order and order.deleted_at is not None:
+        db_session.delete(order)
+        db_session.commit()
+        return jsonify({"success": True, "message": "Order permanently deleted"})
+
+    return jsonify({"success": False, "message": "Order not found in trash"})
+
+
+@app.route("/api/bulk-delete", methods=["POST"])
+def bulk_delete():
+    """Soft-delete multiple orders at once"""
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    ids = request.json.get("ids", [])
+    if not ids:
+        return jsonify({"success": False, "message": "No IDs provided"})
+
+    count = 0
+    for oid in ids:
+        order = db_session.query(PurchaseOrder).get(oid)
+        if order and order.deleted_at is None:
+            order.deleted_at = datetime.utcnow()
+            count += 1
+    db_session.commit()
+    return jsonify({"success": True, "message": f"{count} order(s) moved to trash"})
+
+
+@app.route("/api/trash/bulk-delete", methods=["POST"])
+def bulk_permanent_delete():
+    """Permanently delete multiple orders from trash"""
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    ids = request.json.get("ids", [])
+    if not ids:
+        return jsonify({"success": False, "message": "No IDs provided"})
+
+    count = 0
+    for oid in ids:
+        order = db_session.query(PurchaseOrder).get(oid)
+        if order and order.deleted_at is not None:
+            db_session.delete(order)
+            count += 1
+    db_session.commit()
+    return jsonify({"success": True, "message": f"{count} order(s) permanently deleted"})
+
+
+@app.route("/api/trash/bulk-restore", methods=["POST"])
+def bulk_restore():
+    """Restore multiple orders from trash"""
+    if "email_user" not in session:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    ids = request.json.get("ids", [])
+    if not ids:
+        return jsonify({"success": False, "message": "No IDs provided"})
+
+    count = 0
+    for oid in ids:
+        order = db_session.query(PurchaseOrder).get(oid)
+        if order and order.deleted_at is not None:
+            order.deleted_at = None
+            count += 1
+    db_session.commit()
+    return jsonify({"success": True, "message": f"{count} order(s) restored"})
 
 
 # ---------------- SERVE ATTACHMENTS ----------------

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
+import Sidebar from "./Sidebar";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard = ({ user, handleLogout }) => {
@@ -10,6 +11,7 @@ const Dashboard = ({ user, handleLogout }) => {
         avg_confidence: 0,
     });
     const navigate = useNavigate();
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     useEffect(() => {
         const fetchAnalytics = async () => {
@@ -40,7 +42,8 @@ const Dashboard = ({ user, handleLogout }) => {
     return (
         <div className="bg-[#fdca5e] font-sans h-screen overflow-hidden">
             <div className="h-full overflow-y-auto no-scrollbar">
-                <Navbar user={user} handleLogout={handleLogout} />
+                <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+                <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
                 <div className="max-w-[95%] mx-auto">
                     {/* FILTER + BUTTON */}
