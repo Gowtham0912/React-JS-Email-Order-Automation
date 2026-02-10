@@ -26,7 +26,7 @@ const Contact = ({ user, handleLogout }) => {
                                 </div>
                                 <div>
                                     <h4 className="font-semibold text-gray-900">Email Us</h4>
-                                    <p className="text-gray-600">support@orderiq.com</p>
+                                    <p className="text-gray-600">orderiqofficial.com</p>
                                 </div>
                             </div>
 
