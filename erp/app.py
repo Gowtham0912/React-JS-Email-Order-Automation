@@ -1,4 +1,5 @@
-import sys, os, imaplib, io, threading, time
+import sys, os, imaplib, io, threading, time, json
+import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 import pandas as pd
 from fpdf import FPDF
@@ -100,7 +101,7 @@ def analytics_data():
     #     return jsonify({})
 
     print("DEBUG: Analytics Endpoint Hit")
-    orders = db_session.query(PurchaseOrder).all()
+    orders = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None).all()
     print(f"DEBUG: Analyics Found {len(orders)} orders")
 
     total_orders = len(orders)
@@ -131,6 +132,43 @@ def analytics_data():
         "orders_today": orders_today,
         "urgent_orders": urgent_orders,
         "avg_confidence": round(avg_confidence, 1)
+    })
+
+
+# ---------------- CHART DATA API ----------------
+@app.route("/api/chart-data")
+def chart_data():
+    orders = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None).all()
+
+    # 1. Orders over time (last 7 days)
+    today = date.today()
+    orders_over_time = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        count = sum(1 for o in orders if o.created_at and o.created_at.date() == d)
+        orders_over_time.append({
+            "date": d.strftime("%b %d"),
+            "orders": count
+        })
+
+    # 2. Order status distribution
+    status_counts = {}
+    for o in orders:
+        status = o.order_status or "Unknown"
+        status_counts[status] = status_counts.get(status, 0) + 1
+    status_distribution = [{"name": k, "value": v} for k, v in status_counts.items()]
+
+    # 3. Priority breakdown
+    priority_counts = {}
+    for o in orders:
+        priority = o.priority_level or "Normal"
+        priority_counts[priority] = priority_counts.get(priority, 0) + 1
+    priority_breakdown = [{"name": k, "count": v} for k, v in priority_counts.items()]
+
+    return jsonify({
+        "orders_over_time": orders_over_time,
+        "status_distribution": status_distribution,
+        "priority_breakdown": priority_breakdown
     })
 
 
@@ -468,7 +506,13 @@ def export_excel():
     if "email_user" not in session:
         return jsonify({"error": "Unauthorized"}), 401
 
-    orders = db_session.query(PurchaseOrder).all()
+    query = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None)
+    ids_param = request.args.get("ids")
+    if ids_param:
+        id_list = [int(x) for x in ids_param.split(",") if x.strip().isdigit()]
+        if id_list:
+            query = query.filter(PurchaseOrder.id.in_(id_list))
+    orders = query.all()
 
     df = pd.DataFrame([{
         "Order No": o.order_number,
@@ -502,7 +546,13 @@ def export_pdf():
     if "email_user" not in session:
         return jsonify({"error": "Unauthorized"}), 401
 
-    orders = db_session.query(PurchaseOrder).all()
+    query = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None)
+    ids_param = request.args.get("ids")
+    if ids_param:
+        id_list = [int(x) for x in ids_param.split(",") if x.strip().isdigit()]
+        if id_list:
+            query = query.filter(PurchaseOrder.id.in_(id_list))
+    orders = query.all()
 
     pdf = FPDF()
     pdf.add_page()
@@ -538,6 +588,291 @@ Status: {o.order_status}
     )
 
 
+# ---------------- EXPORT CSV ----------------
+@app.route("/export/csv")
+def export_csv():
+    if "email_user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    query = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None)
+    ids_param = request.args.get("ids")
+    if ids_param:
+        id_list = [int(x) for x in ids_param.split(",") if x.strip().isdigit()]
+        if id_list:
+            query = query.filter(PurchaseOrder.id.in_(id_list))
+    orders = query.all()
+
+    df = pd.DataFrame([{
+        "Order No": o.order_number,
+        "Product": o.product_name,
+        "Quantity": o.quantity_ordered,
+        "Due Date": o.delivery_due_date,
+        "Retailer": o.retailer_name,
+        "Email": o.retailer_email,
+        "Priority": o.priority_level,
+        "Confidence": o.confidence_score,
+        "Status": o.order_status
+    } for o in orders])
+
+    output = io.StringIO()
+    df.to_csv(output, index=False)
+    output.seek(0)
+
+    return send_file(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        as_attachment=True,
+        download_name="ERP_Orders.csv",
+        mimetype="text/csv"
+    )
+
+
+# ---------------- EXPORT JSON ----------------
+@app.route("/export/json")
+def export_json():
+    if "email_user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    query = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None)
+    ids_param = request.args.get("ids")
+    if ids_param:
+        id_list = [int(x) for x in ids_param.split(",") if x.strip().isdigit()]
+        if id_list:
+            query = query.filter(PurchaseOrder.id.in_(id_list))
+    orders = query.all()
+
+    data = [{
+        "order_number": o.order_number,
+        "product_name": o.product_name,
+        "quantity_ordered": o.quantity_ordered,
+        "delivery_due_date": o.delivery_due_date,
+        "retailer_name": o.retailer_name,
+        "retailer_email": o.retailer_email,
+        "priority_level": o.priority_level,
+        "confidence_score": o.confidence_score,
+        "order_status": o.order_status
+    } for o in orders]
+
+    output = io.BytesIO(json.dumps(data, indent=2).encode("utf-8"))
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="ERP_Orders.json",
+        mimetype="application/json"
+    )
+
+
+# ---------------- EXPORT XML ----------------
+@app.route("/export/xml")
+def export_xml():
+    if "email_user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    query = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None)
+    ids_param = request.args.get("ids")
+    if ids_param:
+        id_list = [int(x) for x in ids_param.split(",") if x.strip().isdigit()]
+        if id_list:
+            query = query.filter(PurchaseOrder.id.in_(id_list))
+    orders = query.all()
+
+    root = ET.Element("Orders")
+    for o in orders:
+        order_el = ET.SubElement(root, "Order")
+        ET.SubElement(order_el, "OrderNumber").text = str(o.order_number or "")
+        ET.SubElement(order_el, "Product").text = str(o.product_name or "")
+        ET.SubElement(order_el, "Quantity").text = str(o.quantity_ordered or "")
+        ET.SubElement(order_el, "DueDate").text = str(o.delivery_due_date or "")
+        ET.SubElement(order_el, "Retailer").text = str(o.retailer_name or "")
+        ET.SubElement(order_el, "Email").text = str(o.retailer_email or "")
+        ET.SubElement(order_el, "Priority").text = str(o.priority_level or "")
+        ET.SubElement(order_el, "Confidence").text = str(o.confidence_score or "")
+        ET.SubElement(order_el, "Status").text = str(o.order_status or "")
+
+    output = io.StringIO()
+    tree = ET.ElementTree(root)
+    tree.write(output, encoding="unicode", xml_declaration=True)
+    output_bytes = io.BytesIO(output.getvalue().encode("utf-8"))
+    output_bytes.seek(0)
+
+    return send_file(
+        output_bytes,
+        as_attachment=True,
+        download_name="ERP_Orders.xml",
+        mimetype="application/xml"
+    )
+
+
+# ---------------- CUSTOM EXPORT ----------------
+# Field mapping: key -> (display label, model attribute)
+EXPORT_FIELD_MAP = {
+    "order_number":       ("Order No",        lambda o: o.order_number),
+    "product_name":       ("Product",         lambda o: o.product_name),
+    "quantity_ordered":   ("Quantity",         lambda o: o.quantity_ordered),
+    "unit":               ("Unit",             lambda o: o.unit),
+    "delivery_due_date":  ("Due Date",         lambda o: o.delivery_due_date),
+    "retailer_name":      ("Retailer",         lambda o: o.retailer_name),
+    "retailer_email":     ("Email",            lambda o: o.retailer_email),
+    "retailer_address":   ("Address",          lambda o: o.retailer_address),
+    "retailer_phone":     ("Phone",            lambda o: o.retailer_phone),
+    "order_status":       ("Status",           lambda o: o.order_status),
+    "priority_level":     ("Priority",         lambda o: o.priority_level),
+    "confidence_score":   ("Confidence",       lambda o: o.confidence_score),
+    "source_of_order":    ("Source",           lambda o: o.source_of_order),
+    "remarks":            ("Remarks",          lambda o: o.remarks),
+    "created_at":         ("Created At",       lambda o: str(o.created_at) if o.created_at else None),
+    "processed_at":       ("Processed At",     lambda o: str(o.processed_at) if o.processed_at else None),
+    "client_email_subject": ("Email Subject",  lambda o: o.client_email_subject),
+}
+
+
+@app.route("/export/custom", methods=["POST"])
+def custom_export():
+    """Export orders with user-selected fields in chosen format (pdf/excel)"""
+    if "email_user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json
+    selected_fields = data.get("fields", [])
+    export_format = data.get("format", "excel")  # 'excel' or 'pdf'
+    selected_ids = data.get("ids", [])  # optional list of order IDs
+
+    if not selected_fields:
+        return jsonify({"error": "No fields selected"}), 400
+
+    # Validate fields
+    valid_fields = [f for f in selected_fields if f in EXPORT_FIELD_MAP]
+    if not valid_fields:
+        return jsonify({"error": "No valid fields selected"}), 400
+
+    orders = db_session.query(PurchaseOrder).filter(PurchaseOrder.deleted_at == None)
+    if selected_ids:
+        orders = orders.filter(PurchaseOrder.id.in_(selected_ids))
+    orders = orders.all()
+
+    if export_format == "pdf":
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(200, 10, "ERP Purchase Order Report (Custom)", ln=True, align="C")
+        pdf.ln(10)
+        pdf.set_font("Arial", size=11)
+
+        for o in orders:
+            lines = []
+            for f in valid_fields:
+                label, getter = EXPORT_FIELD_MAP[f]
+                value = getter(o)
+                lines.append(f"{label}: {value}")
+            lines.append("-----------------------------")
+            text = "\n".join(lines)
+            pdf.multi_cell(0, 8, text.encode("latin-1", "ignore").decode("latin-1"))
+            pdf.ln(2)
+
+        output = io.BytesIO()
+        pdf.output(output)
+        output.seek(0)
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name="ERP_Orders_Custom.pdf",
+            mimetype="application/pdf"
+        )
+
+    elif export_format == "csv":
+        rows = []
+        headers = []
+        for f in valid_fields:
+            label, getter = EXPORT_FIELD_MAP[f]
+            headers.append(label)
+        for o in orders:
+            row = {}
+            for f in valid_fields:
+                label, getter = EXPORT_FIELD_MAP[f]
+                row[label] = getter(o)
+            rows.append(row)
+
+        df = pd.DataFrame(rows, columns=headers)
+        output = io.StringIO()
+        df.to_csv(output, index=False)
+        output.seek(0)
+
+        return send_file(
+            io.BytesIO(output.getvalue().encode("utf-8")),
+            as_attachment=True,
+            download_name="ERP_Orders_Custom.csv",
+            mimetype="text/csv"
+        )
+
+    elif export_format == "json":
+        data = []
+        for o in orders:
+            row = {}
+            for f in valid_fields:
+                label, getter = EXPORT_FIELD_MAP[f]
+                row[f] = getter(o)
+            data.append(row)
+
+        output = io.BytesIO(json.dumps(data, indent=2, default=str).encode("utf-8"))
+        output.seek(0)
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name="ERP_Orders_Custom.json",
+            mimetype="application/json"
+        )
+
+    elif export_format == "xml":
+        root = ET.Element("Orders")
+        for o in orders:
+            order_el = ET.SubElement(root, "Order")
+            for f in valid_fields:
+                label, getter = EXPORT_FIELD_MAP[f]
+                tag = f.replace("_", "").title().replace(" ", "")
+                ET.SubElement(order_el, tag).text = str(getter(o) or "")
+
+        output = io.StringIO()
+        tree = ET.ElementTree(root)
+        tree.write(output, encoding="unicode", xml_declaration=True)
+        output_bytes = io.BytesIO(output.getvalue().encode("utf-8"))
+        output_bytes.seek(0)
+
+        return send_file(
+            output_bytes,
+            as_attachment=True,
+            download_name="ERP_Orders_Custom.xml",
+            mimetype="application/xml"
+        )
+
+    else:  # excel
+        rows = []
+        for o in orders:
+            row = {}
+            for f in valid_fields:
+                label, getter = EXPORT_FIELD_MAP[f]
+                row[label] = getter(o)
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False)
+
+        output.seek(0)
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name="ERP_Orders_Custom.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+
 # ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(debug=True)
+

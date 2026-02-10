@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import Footer from "./Footer";
 
 const Trash = ({ user, handleLogout }) => {
     const [trashOrders, setTrashOrders] = useState([]);
@@ -70,7 +71,7 @@ const Trash = ({ user, handleLogout }) => {
     };
 
     return (
-        <div className="font-sans bg-[#fdca5e] text-center m-0 min-h-screen">
+        <div className="font-sans bg-[#fdca5e] text-center m-0 min-h-screen flex flex-col">
             <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
             <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -308,6 +309,7 @@ const Trash = ({ user, handleLogout }) => {
                 </div>
             )}
 
+            <Footer />
             <style>{`
                 @keyframes popUp {
                     0% { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.8); }

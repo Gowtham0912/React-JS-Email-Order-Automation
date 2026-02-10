@@ -31,11 +31,8 @@ const Navbar = ({ user, handleLogout, sidebarOpen, setSidebarOpen }) => {
           <Link to="/analytics" className="text-[#7c5327] font-semibold text-lg hover:text-black transition">
             Analytics
           </Link>
-          <Link to="/contact" className="text-[#7c5327] font-semibold text-lg hover:text-black transition">
-            Contact
-          </Link>
-          <Link to="/about" className="text-[#7c5327] font-semibold text-lg hover:text-black transition">
-            About
+          <Link to="/orders" className="text-[#7c5327] font-semibold text-lg hover:text-black transition">
+            Orders
           </Link>
         </nav>
       </div>

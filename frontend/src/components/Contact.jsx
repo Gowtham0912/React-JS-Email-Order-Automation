@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import Footer from "./Footer";
 
 const Contact = ({ user, handleLogout }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     return (
-        <div className="bg-[#fdca5e] font-sans h-screen overflow-hidden">
-            <div className="h-full overflow-y-auto no-scrollbar">
+        <div className="bg-[#fdca5e] font-sans min-h-screen flex flex-col">
+            <div className="flex-1 overflow-y-auto no-scrollbar">
                 <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
                 <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -45,6 +46,7 @@ const Contact = ({ user, handleLogout }) => {
                     </div>
                 </div>
             </div>
+            <Footer />
             <style>{`
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

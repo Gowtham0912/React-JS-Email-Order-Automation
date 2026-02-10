@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import Footer from "./Footer";
 
 const Orders = ({ user, handleLogout }) => {
     const [orders, setOrders] = useState([]);
@@ -19,6 +20,9 @@ const Orders = ({ user, handleLogout }) => {
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
     const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
+    const [showCustomExport, setShowCustomExport] = useState(false);
+    const [customExportFields, setCustomExportFields] = useState(new Set(["order_number", "product_name", "quantity_ordered", "delivery_due_date", "retailer_name", "retailer_email", "order_status"]));
+    const [customExportFormat, setCustomExportFormat] = useState("excel");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [newOrder, setNewOrder] = useState({
         product_name: "",
@@ -241,7 +245,7 @@ const Orders = ({ user, handleLogout }) => {
     };
 
     return (
-        <div className="font-sans bg-[#fdca5e] text-center m-0 min-h-screen">
+        <div className="font-sans bg-[#fdca5e] text-center m-0 min-h-screen flex flex-col">
             <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
             <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -348,20 +352,47 @@ const Orders = ({ user, handleLogout }) => {
 
                     <div className="relative flex items-center group">
                         <button className="flex items-center gap-2 bg-[#7c5327] hover:bg-black text-white font-medium px-4 py-2 rounded-md transition">
-                            <span>Download</span>
+                            <span>{selectedIds.size > 0 ? `Export (${selectedIds.size})` : "Export"}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="m9 13.5 3 3m0 0 3-3m-3 3v-6m1.06-4.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
                             </svg>
                         </button>
 
                         {/* Dropdown Menu */}
-                        <div className="hidden group-hover:block absolute right-0 top-10 bg-white shadow-lg rounded-md w-48 text-left border border-gray-200 z-50">
-                            <a href={`${API_URL}/export/pdf`} className="w-full text-gray-700 hover:bg-gray-100 px-3 py-2 flex items-center gap-2 transition rounded-md">
-                                <img src="/static/Pdf.svg" className="w-5" alt="PDF" /> Download as PDF
+                        <div className="hidden group-hover:block absolute right-0 top-10 bg-white shadow-lg rounded-md w-52 text-left border border-gray-200 z-50">
+                            {selectedIds.size > 0 && (
+                                <div className="px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-t-md border-b border-amber-200 font-medium">
+                                    {selectedIds.size} row(s) selected
+                                </div>
+                            )}
+                            <a href={`${API_URL}/export/pdf${selectedIds.size > 0 ? `?ids=${Array.from(selectedIds).join(",")}` : ""}`} className="w-full text-gray-700 hover:bg-gray-100 px-3 py-2 flex items-center gap-2 transition">
+                                <img src="/static/Pdf.svg" className="w-5" alt="PDF" /> Export as PDF
                             </a>
-                            <a href={`${API_URL}/export/excel`} className="w-full text-gray-700 hover:bg-gray-100 px-3 py-2 flex items-center gap-2 transition rounded-md">
-                                <img src="/static/Excel.svg" className="w-5" alt="Excel" /> Download as Excel
+                            <a href={`${API_URL}/export/excel${selectedIds.size > 0 ? `?ids=${Array.from(selectedIds).join(",")}` : ""}`} className="w-full text-gray-700 hover:bg-gray-100 px-3 py-2 flex items-center gap-2 transition">
+                                <img src="/static/Excel.svg" className="w-5" alt="Excel" /> Export as Excel
                             </a>
+                            <a href={`${API_URL}/export/csv${selectedIds.size > 0 ? `?ids=${Array.from(selectedIds).join(",")}` : ""}`} className="w-full text-gray-700 hover:bg-gray-100 px-3 py-2 flex items-center gap-2 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-green-600"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                                Export as CSV
+                            </a>
+                            <a href={`${API_URL}/export/json${selectedIds.size > 0 ? `?ids=${Array.from(selectedIds).join(",")}` : ""}`} className="w-full text-gray-700 hover:bg-gray-100 px-3 py-2 flex items-center gap-2 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-yellow-600"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" /></svg>
+                                Export as JSON
+                            </a>
+                            <a href={`${API_URL}/export/xml${selectedIds.size > 0 ? `?ids=${Array.from(selectedIds).join(",")}` : ""}`} className="w-full text-gray-700 hover:bg-gray-100 px-3 py-2 flex items-center gap-2 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-orange-600"><path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" /></svg>
+                                Export as XML
+                            </a>
+                            <button
+                                onClick={() => setShowCustomExport(true)}
+                                className="custom-export-btn w-full px-3 py-2.5 flex items-center gap-2 rounded-b-md text-left relative overflow-hidden"
+                            >
+                                <span className="custom-export-shimmer"></span>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-amber-700 custom-export-icon relative z-10">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 13.5V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m12-3V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m-6-9V3.75m0 3.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 9.75V10.5" />
+                                </svg>
+                                <span className="relative z-10 font-semibold bg-gradient-to-r from-amber-800 via-amber-600 to-amber-800 bg-clip-text text-transparent">Custom Export</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -513,7 +544,7 @@ const Orders = ({ user, handleLogout }) => {
                 </div>
 
                 {/* Scrollable Rows */}
-                <div className="divide-y divide-gray-200 overflow-y-auto max-h-[60vh] no-scrollbar">
+                <div className="divide-y divide-gray-200 overflow-y-auto max-h-[49vh] no-scrollbar">
                     {orders
                         .filter(order => {
                             if (!searchQuery) return true;
@@ -922,6 +953,207 @@ const Orders = ({ user, handleLogout }) => {
                 </div>
             )}
 
+            {/* Custom Export Modal */}
+            {showCustomExport && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl p-5 w-[520px]">
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-amber-200">
+                            <div className="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-[#7c5327]">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+                                </svg>
+                                <h3 className="text-lg font-bold text-[#7c5327]">Custom Export</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowCustomExport(false)}
+                                className="text-gray-400 hover:text-gray-600 transition"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-gray-500 mb-3">Select the fields you want to include in your export:</p>
+
+                        {/* Select All / Clear */}
+                        <div className="flex gap-2 mb-3">
+                            <button
+                                onClick={() => setCustomExportFields(new Set([
+                                    "order_number", "product_name", "quantity_ordered", "unit", "delivery_due_date",
+                                    "retailer_name", "retailer_email", "retailer_address", "retailer_phone",
+                                    "order_status", "priority_level", "confidence_score", "source_of_order",
+                                    "remarks", "created_at", "processed_at", "client_email_subject"
+                                ]))}
+                                className="text-xs text-[#7c5327] hover:underline font-medium"
+                            >Select All</button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                                onClick={() => setCustomExportFields(new Set())}
+                                className="text-xs text-gray-500 hover:underline font-medium"
+                            >Clear All</button>
+                        </div>
+
+                        {/* Field Checkboxes */}
+                        <div className="grid grid-cols-3 gap-x-4 gap-y-2 mb-4">
+                            {[
+                                { key: "order_number", label: "Order Number" },
+                                { key: "product_name", label: "Product Name" },
+                                { key: "quantity_ordered", label: "Quantity" },
+                                { key: "unit", label: "Unit" },
+                                { key: "delivery_due_date", label: "Due Date" },
+                                { key: "retailer_name", label: "Retailer Name" },
+                                { key: "retailer_email", label: "Retailer Email" },
+                                { key: "retailer_address", label: "Address" },
+                                { key: "retailer_phone", label: "Phone" },
+                                { key: "order_status", label: "Status" },
+                                { key: "priority_level", label: "Priority" },
+                                { key: "confidence_score", label: "Confidence" },
+                                { key: "source_of_order", label: "Source" },
+                                { key: "remarks", label: "Remarks" },
+                                { key: "created_at", label: "Created At" },
+                                { key: "processed_at", label: "Processed At" },
+                                { key: "client_email_subject", label: "Email Subject" },
+                            ].map(({ key, label }) => (
+                                <label key={key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
+                                    <input
+                                        type="checkbox"
+                                        checked={customExportFields.has(key)}
+                                        onChange={(e) => {
+                                            setCustomExportFields(prev => {
+                                                const next = new Set(prev);
+                                                if (e.target.checked) next.add(key);
+                                                else next.delete(key);
+                                                return next;
+                                            });
+                                        }}
+                                        className="w-4 h-4 accent-[#7c5327] cursor-pointer"
+                                    />
+                                    {label}
+                                </label>
+                            ))}
+                        </div>
+
+                        {/* Format Selection */}
+                        <div className="flex items-center gap-4 mb-4 pt-3 border-t border-gray-200">
+                            <span className="text-sm font-medium text-gray-700">Format:</span>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="exportFormat"
+                                    value="excel"
+                                    checked={customExportFormat === "excel"}
+                                    onChange={() => setCustomExportFormat("excel")}
+                                    className="accent-[#7c5327]"
+                                />
+                                <img src="/static/Excel.svg" className="w-4" alt="Excel" />
+                                <span className="text-sm text-gray-700">Excel</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="exportFormat"
+                                    value="pdf"
+                                    checked={customExportFormat === "pdf"}
+                                    onChange={() => setCustomExportFormat("pdf")}
+                                    className="accent-[#7c5327]"
+                                />
+                                <img src="/static/Pdf.svg" className="w-4" alt="PDF" />
+                                <span className="text-sm text-gray-700">PDF</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="exportFormat"
+                                    value="csv"
+                                    checked={customExportFormat === "csv"}
+                                    onChange={() => setCustomExportFormat("csv")}
+                                    className="accent-[#7c5327]"
+                                />
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-green-600"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                                <span className="text-sm text-gray-700">CSV</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="exportFormat"
+                                    value="json"
+                                    checked={customExportFormat === "json"}
+                                    onChange={() => setCustomExportFormat("json")}
+                                    className="accent-[#7c5327]"
+                                />
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-yellow-600"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" /></svg>
+                                <span className="text-sm text-gray-700">JSON</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="exportFormat"
+                                    value="xml"
+                                    checked={customExportFormat === "xml"}
+                                    onChange={() => setCustomExportFormat("xml")}
+                                    className="accent-[#7c5327]"
+                                />
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-orange-600"><path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" /></svg>
+                                <span className="text-sm text-gray-700">XML</span>
+                            </label>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+                            <span className="text-xs text-gray-400">{customExportFields.size} field(s) selected</span>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowCustomExport(false)}
+                                    className="px-4 py-2 text-[#7c5327] bg-amber-100 hover:bg-amber-200 rounded-md font-medium text-sm transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    disabled={customExportFields.size === 0}
+                                    onClick={async () => {
+                                        try {
+                                            const res = await fetch(`${API_URL}/export/custom`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                    fields: Array.from(customExportFields),
+                                                    format: customExportFormat,
+                                                    ...(selectedIds.size > 0 && { ids: Array.from(selectedIds) })
+                                                }),
+                                                credentials: "include"
+                                            });
+                                            const blob = await res.blob();
+                                            const url = window.URL.createObjectURL(blob);
+                                            const a = document.createElement("a");
+                                            a.href = url;
+                                            a.download = `ERP_Orders_Custom.${({ pdf: "pdf", excel: "xlsx", csv: "csv", json: "json", xml: "xml" })[customExportFormat] || "xlsx"}`;
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            a.remove();
+                                            window.URL.revokeObjectURL(url);
+                                            setShowCustomExport(false);
+                                            setToast({ type: "mail-updated", message: "Custom export downloaded!" });
+                                        } catch (err) {
+                                            console.error("Custom export error:", err);
+                                            setToast({ type: "no-email", message: "Export failed" });
+                                        }
+                                    }}
+                                    className="px-5 py-2 bg-[#7c5327] hover:bg-[#5c3d1a] text-white rounded-md font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                    </svg>
+                                    Export
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <Footer />
             <style>{`
           .loader {
             width: 50px;
@@ -967,6 +1199,55 @@ const Orders = ({ user, handleLogout }) => {
           }
           .animate-processing {
             animation: processingPop 0.6s ease-out;
+          }
+
+          /* Custom Export Button Animation */
+          .custom-export-btn {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 40%, #fde68a 100%);
+            border-top: 1px solid #f59e0b;
+            transition: all 0.3s ease;
+            animation: customExportGlow 2.5s ease-in-out infinite;
+          }
+          .custom-export-btn:hover {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 40%, #fbbf24 100%);
+            transform: scale(1.02);
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
+          }
+          @keyframes customExportGlow {
+            0%, 100% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.15); }
+            50% { box-shadow: 0 0 14px rgba(245, 158, 11, 0.35), 0 0 4px rgba(251, 191, 36, 0.2); }
+          }
+          .custom-export-shimmer {
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+            animation: shimmerSweep 3s ease-in-out infinite;
+            z-index: 5;
+            pointer-events: none;
+          }
+          @keyframes shimmerSweep {
+            0% { left: -100%; }
+            50% { left: 100%; }
+            100% { left: 100%; }
+          }
+          .custom-export-icon {
+            animation: sparkleRotate 3s ease-in-out infinite;
+          }
+          @keyframes sparkleRotate {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.2) rotate(8deg); }
+            50% { transform: scale(1) rotate(0deg); }
+            75% { transform: scale(1.15) rotate(-8deg); }
+          }
+          .custom-export-badge {
+            animation: badgePulse 2s ease-in-out infinite;
+          }
+          @keyframes badgePulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
           }
           
           /* Hide scrollbar for Chrome, Safari and Opera */

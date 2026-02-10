@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import Footer from "./Footer";
 
 const Analytics = ({ user, handleLogout }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     return (
-        <div className="bg-[#fdca5e] font-sans h-screen overflow-hidden">
-            <div className="h-full overflow-y-auto no-scrollbar">
+        <div className="bg-[#fdca5e] font-sans min-h-screen flex flex-col">
+            <div className="flex-1 overflow-y-auto no-scrollbar">
                 <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
                 <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -28,6 +29,7 @@ const Analytics = ({ user, handleLogout }) => {
                     </div>
                 </div>
             </div>
+            <Footer />
             <style>{`
         /* Hide scrollbar for Chrome, Safari and Opera */
         .no-scrollbar::-webkit-scrollbar {

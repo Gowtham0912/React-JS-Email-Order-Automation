@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend } from "recharts";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import Footer from "./Footer";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard = ({ user, handleLogout }) => {
@@ -12,6 +14,14 @@ const Dashboard = ({ user, handleLogout }) => {
     });
     const navigate = useNavigate();
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [chartData, setChartData] = useState({
+        orders_over_time: [],
+        status_distribution: [],
+        priority_breakdown: []
+    });
+
+    const PIE_COLORS = ["#d97706", "#f59e0b", "#92400e", "#fbbf24", "#78350f"];
+    const BAR_COLORS = ["#d97706", "#f59e0b", "#92400e", "#fbbf24"];
 
     useEffect(() => {
         const fetchAnalytics = async () => {
@@ -31,90 +41,189 @@ const Dashboard = ({ user, handleLogout }) => {
         // Fetch regardless of user prop for now since we disabled backend auth check
         fetchAnalytics();
 
+        const fetchChartData = async () => {
+            try {
+                const res = await fetch("http://localhost:5000/api/chart-data", {
+                    credentials: "include", cache: "no-store"
+                });
+                const result = await res.json();
+                setChartData(result);
+            } catch (err) {
+                console.error("Chart data error:", err);
+            }
+        };
+        fetchChartData();
+
         // Poll every 5 seconds
         const interval = setInterval(() => {
             fetchAnalytics();
+            fetchChartData();
         }, 5000);
 
         return () => clearInterval(interval);
     }, [user]);
 
     return (
-        <div className="bg-[#fdca5e] font-sans h-screen overflow-hidden">
-            <div className="h-full overflow-y-auto no-scrollbar">
+        <div className="bg-[#fdca5e] font-sans min-h-screen flex flex-col">
+            <div className="flex-1 overflow-y-auto no-scrollbar">
                 <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
                 <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
                 <div className="max-w-[95%] mx-auto">
-                    {/* FILTER + BUTTON */}
-                    <div className="flex justify-end items-center gap-4 mt-6">
-                        <select className="border rounded-md px-3 py-2 text-sm focus:outline-none text-gray-900 bg-white">
-                            <option>Today</option>
-                            <option>Yesterday</option>
-                            <option>This Week</option>
-                            <option>Last 7 Days</option>
-                        </select>
-
-                        <button
-                            onClick={() => navigate("/orders")}
-                            className="bg-[#7c5327] text-white px-4 py-2 rounded-md hover:bg-black transition"
-                        >
-                            View Orders
-                        </button>
-                    </div>
-
                     {/* KPI CARDS */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-4">
-                        <div className="bg-white rounded-xl p-5 shadow">
-                            <p className="text-sm text-gray-500">Total Orders</p>
-                            <h2 className="text-3xl font-bold mt-2 text-gray-900">{data.total_orders}</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2">
+                        {/* Total Orders - Circle pattern */}
+                        <div className="relative overflow-hidden bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl p-3 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-default group">
+                            <div className="absolute -top-3 -right-3 w-16 h-16 bg-white/10 rounded-full group-hover:scale-125 transition-transform duration-500"></div>
+                            <div className="absolute -bottom-2 -left-2 w-10 h-10 bg-white/5 rounded-full"></div>
+                            <div className="absolute top-1/2 right-6 w-8 h-8 bg-white/5 rounded-full"></div>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="white" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                                    </svg>
+                                </div>
+                                <p className="text-xs text-amber-100 font-medium">Total Orders</p>
+                            </div>
+                            <h2 className="text-2xl font-bold mt-1 text-white">{data.total_orders}</h2>
                         </div>
 
-                        <div className="bg-white rounded-xl p-5 shadow">
-                            <p className="text-sm text-gray-500">Orders Today</p>
-                            <h2 className="text-3xl font-bold mt-2 text-gray-900">{data.orders_today}</h2>
+                        {/* Orders Today - Diagonal stripe pattern */}
+                        <div className="relative overflow-hidden bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl p-3 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-default group">
+                            <div className="absolute -top-6 -right-6 w-20 h-20 border-4 border-white/10 rounded-full group-hover:rotate-45 transition-transform duration-500"></div>
+                            <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-white/5 to-transparent"></div>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="white" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <p className="text-xs text-amber-100 font-medium">Orders Today</p>
+                            </div>
+                            <h2 className="text-2xl font-bold mt-1 text-white">{data.orders_today}</h2>
                         </div>
 
-                        <div className="bg-white rounded-xl p-5 shadow">
-                            <p className="text-sm text-gray-500">Urgent Orders</p>
-                            <h2 className="text-3xl font-bold text-red-600 mt-2">
-                                {data.urgent_orders}
-                            </h2>
+                        {/* Urgent Orders - Diamond pattern */}
+                        <div className="relative overflow-hidden bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl p-3 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-default group">
+                            <div className="absolute -top-4 right-3 w-12 h-12 bg-white/10 rotate-45 group-hover:rotate-90 transition-transform duration-500"></div>
+                            <div className="absolute -bottom-3 -right-3 w-10 h-10 bg-white/5 rotate-45"></div>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="white" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                    </svg>
+                                </div>
+                                <p className="text-xs text-amber-100 font-medium">Urgent Orders</p>
+                            </div>
+                            <h2 className="text-2xl font-bold mt-1 text-white">{data.urgent_orders}</h2>
                         </div>
 
-                        <div className="bg-white rounded-xl p-5 shadow">
-                            <p className="text-sm text-gray-500">Avg Confidence</p>
-                            <h2 className="text-3xl font-bold text-green-600 mt-2">
-                                {data.avg_confidence}%
-                            </h2>
+                        {/* Avg Confidence - Wave/arc pattern */}
+                        <div className="relative overflow-hidden bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl p-3 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-default group">
+                            <div className="absolute -bottom-6 -right-6 w-24 h-24 border-8 border-white/10 rounded-full group-hover:scale-110 transition-transform duration-500"></div>
+                            <div className="absolute top-0 right-0 w-full h-1/3 bg-gradient-to-b from-white/5 to-transparent"></div>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="white" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <p className="text-xs text-amber-100 font-medium">Avg Confidence</p>
+                            </div>
+                            <h2 className="text-2xl font-bold mt-1 text-white">{data.avg_confidence}%</h2>
+                        </div>
+
+                        {/* View Orders + Filter */}
+                        <div className="rounded-xl p-2 flex flex-col justify-center gap-1.5">
+                            <button
+                                onClick={() => navigate("/orders")}
+                                className="relative overflow-hidden bg-gradient-to-r from-[#7c5327] to-[#a0714a] text-white px-3 py-2 rounded-lg hover:from-[#5a3c1b] hover:to-[#7c5327] transition-all duration-300 text-sm w-full font-medium shadow-md hover:shadow-lg group"
+                            >
+                                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
+                                View Orders
+                            </button>
+                            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 text-gray-900 bg-white w-full shadow-sm">
+                                <option>Today</option>
+                                <option>Yesterday</option>
+                                <option>This Week</option>
+                                <option>Last 7 Days</option>
+                            </select>
                         </div>
                     </div>
 
                     {/* CHARTS */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6 mb-10">
-                        <div className="bg-white rounded-xl p-5 shadow">
-                            <h3 className="font-semibold mb-3 text-gray-900">Orders Over Time</h3>
-                            <div className="h-64 flex items-center justify-center text-gray-400 border rounded">
-                                Line Chart (Coming Next)
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 mb-4">
+                        {/* Line/Area Chart */}
+                        <div className="bg-white/90 backdrop-blur-sm rounded-xl p-3 shadow-lg hover:shadow-xl transition-all duration-300 border border-white/50 hover:-translate-y-0.5">
+                            <div className="flex items-center gap-2 mb-1">
+                                <div className="w-1 h-4 bg-gradient-to-b from-amber-500 to-amber-700 rounded-full"></div>
+                                <h3 className="font-semibold text-sm text-gray-900">Orders Over Time</h3>
+                            </div>
+                            <div className="h-44">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={chartData.orders_over_time} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#d97706" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                                        <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                                        <Area type="monotone" dataKey="orders" stroke="#d97706" strokeWidth={2} fill="url(#colorOrders)" dot={{ fill: '#d97706', r: 3 }} activeDot={{ r: 5 }} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl p-5 shadow">
-                            <h3 className="font-semibold mb-3 text-gray-900">Order Status Distribution</h3>
-                            <div className="h-64 flex items-center justify-center text-gray-400 border rounded">
-                                Pie Chart (Coming Next)
+                        {/* Pie Chart */}
+                        <div className="bg-white/90 backdrop-blur-sm rounded-xl p-3 shadow-lg hover:shadow-xl transition-all duration-300 border border-white/50 hover:-translate-y-0.5">
+                            <div className="flex items-center gap-2 mb-1">
+                                <div className="w-1 h-4 bg-gradient-to-b from-amber-500 to-amber-700 rounded-full"></div>
+                                <h3 className="font-semibold text-sm text-gray-900">Order Status Distribution</h3>
+                            </div>
+                            <div className="h-44">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={chartData.status_distribution} cx="50%" cy="50%" innerRadius={35} outerRadius={60} dataKey="value" paddingAngle={3} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} style={{ fontSize: 11 }}>
+                                            {chartData.status_distribution.map((_, idx) => (
+                                                <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl p-5 shadow md:col-span-2">
-                            <h3 className="font-semibold mb-3 text-gray-900">Priority Breakdown</h3>
-                            <div className="h-64 flex items-center justify-center text-gray-400 border rounded">
-                                Bar Chart (Coming Next)
+                        {/* Bar Chart */}
+                        <div className="bg-white/90 backdrop-blur-sm rounded-xl p-3 shadow-lg hover:shadow-xl transition-all duration-300 border border-white/50 md:col-span-2 hover:-translate-y-0.5">
+                            <div className="flex items-center gap-2 mb-1">
+                                <div className="w-1 h-4 bg-gradient-to-b from-amber-500 to-amber-700 rounded-full"></div>
+                                <h3 className="font-semibold text-sm text-gray-900">Priority Breakdown</h3>
+                            </div>
+                            <div className="h-44">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chartData.priority_breakdown} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                                        <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                                            {chartData.priority_breakdown.map((_, idx) => (
+                                                <Cell key={idx} fill={BAR_COLORS[idx % BAR_COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+            <Footer />
             <style>{`
         /* Hide scrollbar for Chrome, Safari and Opera */
         .no-scrollbar::-webkit-scrollbar {
