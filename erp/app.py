@@ -165,11 +165,72 @@ def chart_data():
         priority_counts[priority] = priority_counts.get(priority, 0) + 1
     priority_breakdown = [{"name": k, "count": v} for k, v in priority_counts.items()]
 
+    # 4. Top retailers (top 5 by order count)
+    retailer_counts = {}
+    for o in orders:
+        name = o.retailer_name or "Unknown"
+        retailer_counts[name] = retailer_counts.get(name, 0) + 1
+    top_retailers = sorted(
+        [{"name": k, "orders": v} for k, v in retailer_counts.items()],
+        key=lambda x: x["orders"], reverse=True
+    )[:5]
+
+    # 5. Orders by day of week
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    day_counts = {d: 0 for d in day_names}
+    for o in orders:
+        if o.created_at:
+            day_name = day_names[o.created_at.weekday()]
+            day_counts[day_name] += 1
+    orders_by_day = [{"day": d, "orders": day_counts[d]} for d in day_names]
+
     return jsonify({
         "orders_over_time": orders_over_time,
         "status_distribution": status_distribution,
-        "priority_breakdown": priority_breakdown
+        "priority_breakdown": priority_breakdown,
+        "top_retailers": top_retailers,
+        "orders_by_day": orders_by_day
     })
+
+
+# ---------------- RECENT ACTIVITY API ----------------
+@app.route("/api/recent-activity")
+def recent_activity():
+    orders = db_session.query(PurchaseOrder).filter(
+        PurchaseOrder.deleted_at.is_(None)
+    ).order_by(PurchaseOrder.created_at.desc()).limit(3).all()
+
+    now = datetime.utcnow()
+    activities = []
+    for o in orders:
+        # Calculate time ago
+        if o.created_at:
+            diff = now - o.created_at
+            seconds = int(diff.total_seconds())
+            if seconds < 60:
+                time_ago = "just now"
+            elif seconds < 3600:
+                mins = seconds // 60
+                time_ago = f"{mins}m ago"
+            elif seconds < 86400:
+                hours = seconds // 3600
+                time_ago = f"{hours}h ago"
+            else:
+                days = seconds // 86400
+                time_ago = f"{days}d ago"
+        else:
+            time_ago = "unknown"
+
+        activities.append({
+            "id": o.id,
+            "retailer": o.retailer_name or "Unknown",
+            "product": o.product_name or "N/A",
+            "priority": o.priority_level or "Normal",
+            "source": o.source_of_order or "Email",
+            "time_ago": time_ago
+        })
+
+    return jsonify(activities)
 
 
 # ---------------- MANUAL SCAN ----------------
@@ -353,6 +414,7 @@ def get_orders():
             "confidence_score": o.confidence_score,
             "order_number": o.order_number,
             "created_at": str(o.created_at) if o.created_at else None,
+            "processed_at": str(o.processed_at) if o.processed_at else None,
             "unit": o.unit,
             "source_of_order": o.source_of_order,
             "remarks": o.remarks,

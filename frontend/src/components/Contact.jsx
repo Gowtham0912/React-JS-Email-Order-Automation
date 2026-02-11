@@ -6,11 +6,13 @@ import Footer from "./Footer";
 const Contact = ({ user, handleLogout }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     return (
-        <div className="bg-[#fdca5e] font-sans min-h-screen flex flex-col">
-            <div className="flex-1 overflow-y-auto no-scrollbar">
+        <div className="bg-[#fdca5e] font-sans h-screen flex flex-col overflow-hidden">
+            <div className="shrink-0">
                 <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
                 <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            </div>
 
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex items-center justify-center">
                 <div className="max-w-2xl mx-auto mt-10">
                     <div className="bg-white rounded-xl p-8 shadow-lg text-center">
                         <h2 className="text-3xl font-bold text-[#7c5327] mb-6">Contact Support</h2>
@@ -46,7 +48,9 @@ const Contact = ({ user, handleLogout }) => {
                     </div>
                 </div>
             </div>
-            <Footer />
+            <div className="shrink-0">
+                <Footer />
+            </div>
             <style>{`
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

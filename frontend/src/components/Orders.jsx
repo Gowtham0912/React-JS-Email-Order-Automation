@@ -17,6 +17,7 @@ const Orders = ({ user, handleLogout }) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [sortField, setSortField] = useState("id");
     const [sortDirection, setSortDirection] = useState("desc");
+    const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
     const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
@@ -244,13 +245,55 @@ const Orders = ({ user, handleLogout }) => {
         }
     };
 
+    // Compute filtered + sorted orders once for reuse
+    const filteredOrders = orders
+        .filter(order => {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+                (order.product_name || '').toLowerCase().includes(q) ||
+                (order.retailer_name || '').toLowerCase().includes(q) ||
+                (order.retailer_email || '').toLowerCase().includes(q) ||
+                (order.retailer_address || '').toLowerCase().includes(q) ||
+                (order.client_email_subject || '').toLowerCase().includes(q) ||
+                (order.order_status || '').toLowerCase().includes(q) ||
+                (order.priority_level || '').toLowerCase().includes(q) ||
+                String(order.id).includes(q) ||
+                (order.quantity_ordered || '').toLowerCase().includes(q) ||
+                (order.order_number || '').toLowerCase().includes(q) ||
+                (order.unit || '').toLowerCase().includes(q) ||
+                (order.source_of_order || '').toLowerCase().includes(q) ||
+                (order.remarks || '').toLowerCase().includes(q) ||
+                (order.retailer_phone || '').toLowerCase().includes(q) ||
+                (order.delivery_due_date || '').toLowerCase().includes(q) ||
+                String(order.created_at || '').toLowerCase().includes(q) ||
+                String(order.processed_at || '').toLowerCase().includes(q)
+            );
+        })
+        .sort((a, b) => {
+            let valA = a[sortField];
+            let valB = b[sortField];
+            if (sortField === "id" || sortField === "confidence_score") {
+                valA = Number(valA) || 0;
+                valB = Number(valB) || 0;
+            } else {
+                valA = (valA || '').toString().toLowerCase();
+                valB = (valB || '').toString().toLowerCase();
+            }
+            if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+            if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+            return 0;
+        });
+
     return (
-        <div className="font-sans bg-[#fdca5e] text-center m-0 min-h-screen flex flex-col">
-            <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-            <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="font-sans bg-[#fdca5e] text-center m-0 h-screen flex flex-col overflow-hidden">
+            <div className="shrink-0">
+                <Navbar user={user} handleLogout={handleLogout} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+                <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            </div>
 
             {/* Status Message (Toast) and Processing Indicator - share same position */}
-            <div className="relative">
+            <div className="relative shrink-0">
                 {toast && (
                     <span className="absolute left-1/2 transform -translate-x-1/2 inline-flex items-center gap-2 font-semibold mt-2 bg-white px-5 py-2 rounded-3xl shadow-lg transition-all duration-500 animate-pop z-50">
                         {toast.type === "no-email" ? (
@@ -305,45 +348,170 @@ const Orders = ({ user, handleLogout }) => {
             )}
 
             {/* Controls */}
-            <div className="w-[95%] h-12 mx-auto flex justify-between items-center relative mt-5">
+            <div className="shrink-0 w-[95%] mx-auto flex items-center gap-3 relative mt-5">
                 {/* Left: Scan Controls */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 shrink-0">
                     {!autoScan && (
                         <button
                             onClick={handleScan}
-                            className="flex items-center gap-2 bg-[#7c5327] hover:bg-black text-white px-6 py-2 rounded-md font-medium transition"
+                            className="flex items-center gap-2 bg-gradient-to-r from-[#7c5327] to-[#a0693b] hover:from-[#5a3a1a] hover:to-[#7c5327] text-white px-5 h-10 rounded-md font-medium transition-all duration-200 text-sm shadow-md"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                             </svg>
-                            <span>Scan for New Emails</span>
+                            <span>Scan Emails</span>
                         </button>
                     )}
 
                     {/* Automatic Scan Toggle */}
-                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-md shadow-sm">
-                        <label className="flex items-center cursor-pointer gap-2 text-gray-800 font-medium">
-                            <span>Automatic Scan</span>
+                    <div className={`flex items-center gap-2 px-3 h-10 rounded-md shadow-md transition-all duration-500 ${autoScan ? "bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-400 shadow-green-200/50" : "bg-gradient-to-r from-[#7c5327] to-[#a0693b] border-2 border-transparent"}`}>
+                        <label className="flex items-center cursor-pointer gap-2 font-medium">
+                            {autoScan && (
+                                <div className="relative w-4 h-4 shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-green-600 animate-spin" style={{ animationDuration: "3s" }}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5" />
+                                    </svg>
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-1 h-1 bg-green-500 rounded-full animate-ping"></div>
+                                    </div>
+                                </div>
+                            )}
+                            <span className={`text-xs whitespace-nowrap ${autoScan ? "text-green-700 font-semibold" : "text-white font-medium"}`}>
+                                {autoScan ? "Auto Scanning" : "Auto Scan"}
+                            </span>
                             <div
                                 className="relative"
                                 onClick={toggleAutoScan}
                             >
-                                <div className={`w-10 h-5 bg-gray-300 rounded-full transition ${autoScan ? "bg-green-600" : ""}`}></div>
-                                <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 left-0.5 transition transform ${autoScan ? "translate-x-5" : "translate-x-0"}`}></div>
+                                <div className={`w-10 h-5 rounded-full transition-all duration-300 ${autoScan ? "bg-green-500 shadow-lg shadow-green-500/40" : "bg-gray-300"}`}>
+                                    {autoScan && <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-20"></div>}
+                                </div>
+                                <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-md transition-all duration-300 ${autoScan ? "left-[22px] scale-110" : "left-0.5"}`}></div>
                             </div>
                         </label>
                     </div>
                 </div>
 
-                {/* Right: Custom Order + Download Button */}
-                <div className="flex items-center gap-3">
+                {/* Center: Search & Sort */}
+                <div className="flex-1 bg-gradient-to-r from-[#7c5327] to-[#a0693b] rounded-md px-2 h-10 flex items-center gap-3 shadow-lg">
+                    {/* Search */}
+                    <div className="relative flex-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/50">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="Search orders..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-20 py-1 rounded-md bg-white/15 text-sm text-white placeholder-white/40 border border-white/10 focus:outline-none focus:bg-white/20 focus:border-white/30 transition-all duration-200"
+                        />
+                        {searchQuery && (
+                            <>
+                                <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs bg-amber-400 text-[#5a3a1a] font-bold px-2 py-0.5 rounded-full">
+                                    {filteredOrders.length}
+                                </span>
+                                <button
+                                    onClick={() => setSearchQuery("")}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-all duration-200"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-3.5 h-3.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className="w-px h-6 bg-white/20"></div>
+
+                    {/* Sort */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-white/50 font-medium tracking-wide uppercase">Sort</span>
+                        <div className="relative">
+                            <button
+                                onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                                className="flex items-center gap-1.5 text-xs text-white bg-white/15 border border-white/10 rounded-md px-2.5 py-1.5 cursor-pointer hover:bg-white/25 transition-all duration-200"
+                            >
+                                <span>{{
+                                    id: "Order ID", product_name: "Product", quantity_ordered: "Quantity",
+                                    delivery_due_date: "Due Date", retailer_name: "Retailer", retailer_email: "Email",
+                                    order_status: "Status", priority_level: "Priority", confidence_score: "Confidence"
+                                }[sortField]}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" className={`w-3.5 h-3.5 transition-transform duration-200 ${sortDropdownOpen ? 'rotate-180' : ''}`}>
+                                    <path stroke="rgba(255,255,255,0.6)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 8l4 4 4-4" />
+                                </svg>
+                            </button>
+                            {sortDropdownOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setSortDropdownOpen(false)}></div>
+                                    <div className="absolute right-0 top-9 z-50 w-44 bg-gradient-to-b from-[#7c5327] to-[#5a3a1a] rounded-lg shadow-2xl border border-amber-700/50 overflow-hidden animate-in">
+                                        {[
+                                            { value: "id", label: "Order ID", icon: "#" },
+                                            { value: "product_name", label: "Product", icon: "📦" },
+                                            { value: "quantity_ordered", label: "Quantity", icon: "🔢" },
+                                            { value: "delivery_due_date", label: "Due Date", icon: "📅" },
+                                            { value: "retailer_name", label: "Retailer", icon: "🏪" },
+                                            { value: "retailer_email", label: "Email", icon: "✉️" },
+                                            { value: "order_status", label: "Status", icon: "📊" },
+                                            { value: "priority_level", label: "Priority", icon: "🔥" },
+                                            { value: "confidence_score", label: "Confidence", icon: "⭐" },
+                                        ].map((item) => (
+                                            <button
+                                                key={item.value}
+                                                onClick={() => { setSortField(item.value); setSortDropdownOpen(false); }}
+                                                className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-all duration-150 ${sortField === item.value
+                                                    ? "bg-amber-400/30 text-amber-200 font-semibold"
+                                                    : "text-white/80 hover:bg-white/10 hover:text-white"
+                                                    }`}
+                                            >
+                                                <span className="w-4 text-center text-[10px]">{item.icon}</span>
+                                                <span className="flex-1">{item.label}</span>
+                                                {sortField === item.value && (
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-3.5 h-3.5 text-amber-400">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                                    </svg>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setSortDirection(prev => prev === "asc" ? "desc" : "asc")}
+                            className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-amber-400/90 hover:bg-amber-400 text-[#5a3a1a] text-xs font-bold transition-all duration-200 shadow-sm"
+                            title={sortDirection === "asc" ? "Ascending" : "Descending"}
+                        >
+                            {sortDirection === "asc" ? (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-3 h-3">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                    </svg>
+                                    ASC
+                                </>
+                            ) : (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-3 h-3">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                    </svg>
+                                    DESC
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Right: Custom Order + Export */}
+                <div className="flex items-center gap-3 shrink-0">
                     {/* Custom Order Button - Only for pythonprojectimap@gmail.com */}
                     {user === "pythonprojectimap@gmail.com" && (
                         <button
                             onClick={() => setShowCustomOrderModal(true)}
-                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-md transition"
+                            className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium px-4 h-10 rounded-md transition-all duration-200 text-sm shadow-md"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                             </svg>
                             <span>Custom Order</span>
@@ -351,9 +519,9 @@ const Orders = ({ user, handleLogout }) => {
                     )}
 
                     <div className="relative flex items-center group">
-                        <button className="flex items-center gap-2 bg-[#7c5327] hover:bg-black text-white font-medium px-4 py-2 rounded-md transition">
+                        <button className="flex items-center gap-2 bg-gradient-to-r from-[#7c5327] to-[#a0693b] hover:from-[#5a3a1a] hover:to-[#7c5327] text-white font-medium px-4 h-10 rounded-md transition-all duration-200 text-sm shadow-md">
                             <span>{selectedIds.size > 0 ? `Export (${selectedIds.size})` : "Export"}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="m9 13.5 3 3m0 0 3-3m-3 3v-6m1.06-4.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
                             </svg>
                         </button>
@@ -398,93 +566,10 @@ const Orders = ({ user, handleLogout }) => {
                 </div>
             </div>
 
-            {/* Search & Sort Bar */}
-            <div className="w-[95%] mx-auto flex items-center gap-3 mt-4">
-                {/* Search */}
-                <div className="relative flex-1 max-w-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                    </svg>
-                    <input
-                        type="text"
-                        placeholder="Search orders by product, retailer, email, status..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 shadow-sm"
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    )}
-                </div>
-
-                {/* Sort */}
-                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-300">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-gray-500">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5-3L16.5 18m0 0L12 13.5m4.5 4.5V4.5" />
-                    </svg>
-                    <select
-                        value={sortField}
-                        onChange={(e) => setSortField(e.target.value)}
-                        className="text-sm text-gray-700 bg-transparent border-none outline-none cursor-pointer"
-                    >
-                        <option value="id">Order ID</option>
-                        <option value="product_name">Product Name</option>
-                        <option value="quantity_ordered">Quantity</option>
-                        <option value="delivery_due_date">Due Date</option>
-                        <option value="retailer_name">Retailer Name</option>
-                        <option value="retailer_email">Retailer Email</option>
-                        <option value="order_status">Status</option>
-                        <option value="priority_level">Priority</option>
-                        <option value="confidence_score">Confidence</option>
-                    </select>
-                    <button
-                        onClick={() => setSortDirection(prev => prev === "asc" ? "desc" : "asc")}
-                        className="p-1 rounded hover:bg-gray-100 transition text-gray-500"
-                        title={sortDirection === "asc" ? "Ascending" : "Descending"}
-                    >
-                        {sortDirection === "asc" ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-                            </svg>
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                            </svg>
-                        )}
-                    </button>
-                </div>
-
-                {/* Results count */}
-                {searchQuery && (
-                    <span className="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-300">
-                        {orders.filter(o => {
-                            const q = searchQuery.toLowerCase();
-                            return (
-                                (o.product_name || "").toLowerCase().includes(q) ||
-                                (o.retailer_name || "").toLowerCase().includes(q) ||
-                                (o.retailer_email || "").toLowerCase().includes(q) ||
-                                (o.retailer_address || "").toLowerCase().includes(q) ||
-                                (o.client_email_subject || "").toLowerCase().includes(q) ||
-                                (o.order_status || "").toLowerCase().includes(q) ||
-                                (o.priority_level || "").toLowerCase().includes(q) ||
-                                String(o.id).includes(q) ||
-                                (o.quantity_ordered || "").toLowerCase().includes(q)
-                            );
-                        }).length} result(s) found
-                    </span>
-                )}
-            </div>
 
             {/* Bulk Action Bar */}
             {selectedIds.size > 0 && (
-                <div className="w-[95%] mx-auto mt-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-2.5 flex items-center justify-between shadow-sm">
+                <div className="shrink-0 w-[95%] mx-auto mt-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-2.5 flex items-center justify-between shadow-sm">
                     <div className="flex items-center gap-2 text-sm text-amber-800 font-medium">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
@@ -507,21 +592,22 @@ const Orders = ({ user, handleLogout }) => {
                         </button>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* Orders Table */}
-            <div className="mt-3 w-[95%] mx-auto bg-white rounded-lg shadow-md border border-gray-300 px-3 pt-3 mb-15">
+            <div className="mt-3 w-[95%] mx-auto bg-white rounded-lg shadow-md border border-gray-300 px-3 pt-3 mb-2 flex-1 min-h-0 flex flex-col">
                 {/* Header row */}
-                <div className="bg-[#7c5327] text-white font-semibold py-3 px-4 rounded-md text-sm sticky top-0 z-10">
+                <div className="shrink-0 bg-[#7c5327] text-white font-semibold py-3 px-4 rounded-md text-sm sticky top-0 z-10">
                     <div className="flex">
                         <div className="w-[3%] flex items-center">
                             <input
                                 type="checkbox"
                                 className="w-4 h-4 accent-amber-400 cursor-pointer"
-                                checked={selectedIds.size > 0 && orders.length > 0 && selectedIds.size === orders.length}
+                                checked={selectedIds.size > 0 && filteredOrders.length > 0 && selectedIds.size === filteredOrders.length}
                                 onChange={(e) => {
                                     if (e.target.checked) {
-                                        setSelectedIds(new Set(orders.map(o => o.id)));
+                                        setSelectedIds(new Set(filteredOrders.map(o => o.id)));
                                     } else {
                                         setSelectedIds(new Set());
                                     }
@@ -544,38 +630,8 @@ const Orders = ({ user, handleLogout }) => {
                 </div>
 
                 {/* Scrollable Rows */}
-                <div className="divide-y divide-gray-200 overflow-y-auto max-h-[49vh] no-scrollbar">
-                    {orders
-                        .filter(order => {
-                            if (!searchQuery) return true;
-                            const q = searchQuery.toLowerCase();
-                            return (
-                                (order.product_name || "").toLowerCase().includes(q) ||
-                                (order.retailer_name || "").toLowerCase().includes(q) ||
-                                (order.retailer_email || "").toLowerCase().includes(q) ||
-                                (order.retailer_address || "").toLowerCase().includes(q) ||
-                                (order.client_email_subject || "").toLowerCase().includes(q) ||
-                                (order.order_status || "").toLowerCase().includes(q) ||
-                                (order.priority_level || "").toLowerCase().includes(q) ||
-                                String(order.id).includes(q) ||
-                                (order.quantity_ordered || "").toLowerCase().includes(q)
-                            );
-                        })
-                        .sort((a, b) => {
-                            let valA = a[sortField];
-                            let valB = b[sortField];
-                            // Handle numeric fields
-                            if (sortField === "id" || sortField === "confidence_score") {
-                                valA = Number(valA) || 0;
-                                valB = Number(valB) || 0;
-                            } else {
-                                valA = String(valA || "").toLowerCase();
-                                valB = String(valB || "").toLowerCase();
-                            }
-                            if (valA < valB) return sortDirection === "asc" ? -1 : 1;
-                            if (valA > valB) return sortDirection === "asc" ? 1 : -1;
-                            return 0;
-                        })
+                <div className="divide-y divide-gray-200 overflow-y-auto flex-1 min-h-0 no-scrollbar">
+                    {filteredOrders
                         .map((order) => (
                             <React.Fragment key={order.id}>
                                 <div className={`flex items-center py-3 px-4 hover:bg-gray-50 text-sm text-gray-900 ${selectedIds.has(order.id) ? 'bg-amber-50' : ''}`}>
@@ -743,417 +799,427 @@ const Orders = ({ user, handleLogout }) => {
             </div>
 
             {/* Delete Confirmation Modal */}
-            {deleteId && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
-                    <div className="bg-white rounded-xl shadow-lg p-6 w-[380px] text-center">
-                        <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-7 h-7 text-amber-600">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                            </svg>
+            {
+                deleteId && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
+                        <div className="bg-white rounded-xl shadow-lg p-6 w-[380px] text-center">
+                            <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-7 h-7 text-amber-600">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-semibold mb-2">Move to Trash?</h3>
+                            <p className="text-sm text-gray-500 mb-4">This order will be moved to Trash and stored for <strong>30 days</strong>. You can restore it anytime from the Trash page.</p>
+                            <button onClick={handleDelete} className="bg-[#7c5327] hover:bg-black text-white px-4 py-2 rounded-md mx-2 font-medium transition">Yes, Move to Trash</button>
+                            <button onClick={() => setDeleteId(null)} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md mx-2 font-medium transition">Cancel</button>
                         </div>
-                        <h3 className="text-lg font-semibold mb-2">Move to Trash?</h3>
-                        <p className="text-sm text-gray-500 mb-4">This order will be moved to Trash and stored for <strong>30 days</strong>. You can restore it anytime from the Trash page.</p>
-                        <button onClick={handleDelete} className="bg-[#7c5327] hover:bg-black text-white px-4 py-2 rounded-md mx-2 font-medium transition">Yes, Move to Trash</button>
-                        <button onClick={() => setDeleteId(null)} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md mx-2 font-medium transition">Cancel</button>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Bulk Delete Confirmation Modal */}
-            {showBulkDeleteConfirm && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
-                    <div className="bg-white rounded-xl shadow-lg p-6 w-[400px] text-center">
-                        <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-7 h-7 text-amber-600">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                            </svg>
+            {
+                showBulkDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
+                        <div className="bg-white rounded-xl shadow-lg p-6 w-[400px] text-center">
+                            <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-7 h-7 text-amber-600">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-semibold mb-2">Move {selectedIds.size} order(s) to Trash?</h3>
+                            <p className="text-sm text-gray-500 mb-4">Selected orders will be moved to Trash and stored for <strong>30 days</strong>. You can restore them anytime from the Trash page.</p>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const res = await fetch(`${API_URL}/api/bulk-delete`, {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ ids: Array.from(selectedIds) }),
+                                            credentials: "include",
+                                        });
+                                        const result = await res.json();
+                                        if (result.success) {
+                                            setToast({ type: "deleted", message: result.message });
+                                            setDeletedOrderHistory(prev => [...prev, ...Array.from(selectedIds)]);
+                                            setSelectedIds(new Set());
+                                            fetchOrders();
+                                        }
+                                    } catch (err) { console.error("Bulk delete error:", err); }
+                                    setShowBulkDeleteConfirm(false);
+                                }}
+                                className="bg-[#7c5327] hover:bg-black text-white px-4 py-2 rounded-md mx-2 font-medium transition"
+                            >Yes, Move to Trash</button>
+                            <button onClick={() => setShowBulkDeleteConfirm(false)} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md mx-2 font-medium transition">Cancel</button>
                         </div>
-                        <h3 className="text-lg font-semibold mb-2">Move {selectedIds.size} order(s) to Trash?</h3>
-                        <p className="text-sm text-gray-500 mb-4">Selected orders will be moved to Trash and stored for <strong>30 days</strong>. You can restore them anytime from the Trash page.</p>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    const res = await fetch(`${API_URL}/api/bulk-delete`, {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ ids: Array.from(selectedIds) }),
-                                        credentials: "include",
-                                    });
-                                    const result = await res.json();
-                                    if (result.success) {
-                                        setToast({ type: "deleted", message: result.message });
-                                        setDeletedOrderHistory(prev => [...prev, ...Array.from(selectedIds)]);
-                                        setSelectedIds(new Set());
-                                        fetchOrders();
-                                    }
-                                } catch (err) { console.error("Bulk delete error:", err); }
-                                setShowBulkDeleteConfirm(false);
-                            }}
-                            className="bg-[#7c5327] hover:bg-black text-white px-4 py-2 rounded-md mx-2 font-medium transition"
-                        >Yes, Move to Trash</button>
-                        <button onClick={() => setShowBulkDeleteConfirm(false)} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md mx-2 font-medium transition">Cancel</button>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Custom Order Modal */}
-            {showCustomOrderModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
-                    <div className="bg-white rounded-xl shadow-2xl p-5 w-[520px]">
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-amber-200">
-                            <h3 className="text-lg font-bold text-[#7c5327]">Add Custom Order</h3>
-                            <button
-                                onClick={() => setShowCustomOrderModal(false)}
-                                className="text-gray-400 hover:text-gray-600 transition"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        {/* Product Details Row */}
-                        <div className="grid grid-cols-3 gap-3 mb-3">
-                            <div className="col-span-2">
-                                <label className="block text-xs font-semibold text-[#7c5327] mb-1">Product Name *</label>
-                                <input
-                                    type="text"
-                                    value={newOrder.product_name}
-                                    onChange={(e) => setNewOrder({ ...newOrder, product_name: e.target.value })}
-                                    className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
-                                    placeholder="Enter product name"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-[#7c5327] mb-1">Priority</label>
-                                <select
-                                    value={newOrder.priority}
-                                    onChange={(e) => setNewOrder({ ...newOrder, priority: e.target.value })}
-                                    className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
-                                >
-                                    <option value="Normal">Normal</option>
-                                    <option value="Urgent">Urgent</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Quantity, Unit, Due Date Row */}
-                        <div className="grid grid-cols-3 gap-3 mb-3">
-                            <div>
-                                <label className="block text-xs font-semibold text-[#7c5327] mb-1">Quantity *</label>
-                                <input
-                                    type="text"
-                                    value={newOrder.quantity}
-                                    onChange={(e) => setNewOrder({ ...newOrder, quantity: e.target.value })}
-                                    className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
-                                    placeholder="Qty"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-[#7c5327] mb-1">Unit</label>
-                                <input
-                                    type="text"
-                                    value={newOrder.unit}
-                                    onChange={(e) => setNewOrder({ ...newOrder, unit: e.target.value })}
-                                    className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
-                                    placeholder="pcs, kg"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-[#7c5327] mb-1">Due Date *</label>
-                                <input
-                                    type="date"
-                                    value={newOrder.due_date}
-                                    onChange={(e) => setNewOrder({ ...newOrder, due_date: e.target.value })}
-                                    className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Retailer Section */}
-                        <div className="bg-amber-50 rounded-lg p-3 mb-3 border border-amber-200">
-                            <h4 className="text-xs font-bold text-[#7c5327] mb-2 uppercase tracking-wide">Retailer Details</h4>
-
-                            <div className="grid grid-cols-2 gap-3 mb-2">
-                                <div>
-                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Name *</label>
-                                    <input
-                                        type="text"
-                                        value={newOrder.retailer_name}
-                                        onChange={(e) => setNewOrder({ ...newOrder, retailer_name: e.target.value })}
-                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
-                                        placeholder="Retailer name"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Email *</label>
-                                    <input
-                                        type="email"
-                                        value={newOrder.retailer_email}
-                                        onChange={(e) => setNewOrder({ ...newOrder, retailer_email: e.target.value })}
-                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
-                                        placeholder="Email address"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Phone</label>
-                                    <input
-                                        type="text"
-                                        value={newOrder.phone}
-                                        onChange={(e) => setNewOrder({ ...newOrder, phone: e.target.value })}
-                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
-                                        placeholder="Phone number"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Address</label>
-                                    <input
-                                        type="text"
-                                        value={newOrder.address}
-                                        onChange={(e) => setNewOrder({ ...newOrder, address: e.target.value })}
-                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
-                                        placeholder="Address"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Remarks */}
-                        <div className="mb-4">
-                            <label className="block text-xs font-semibold text-[#7c5327] mb-1">Remarks</label>
-                            <textarea
-                                value={newOrder.remarks}
-                                onChange={(e) => setNewOrder({ ...newOrder, remarks: e.target.value })}
-                                className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none h-14 resize-none"
-                                placeholder="Optional notes..."
-                            />
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
-                            <button
-                                onClick={() => setShowCustomOrderModal(false)}
-                                className="px-4 py-2 text-[#7c5327] bg-amber-100 hover:bg-amber-200 rounded-md font-medium text-sm transition"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleAddOrder}
-                                disabled={isSubmitting || !newOrder.product_name || !newOrder.quantity || !newOrder.due_date || !newOrder.retailer_name || !newOrder.retailer_email}
-                                className="px-5 py-2 bg-[#7c5327] hover:bg-[#5c3d1a] text-white rounded-md font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isSubmitting ? "Saving..." : "Save Order"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Custom Export Modal */}
-            {showCustomExport && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
-                    <div className="bg-white rounded-xl shadow-2xl p-5 w-[520px]">
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-amber-200">
-                            <div className="flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-[#7c5327]">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
-                                </svg>
-                                <h3 className="text-lg font-bold text-[#7c5327]">Custom Export</h3>
-                            </div>
-                            <button
-                                onClick={() => setShowCustomExport(false)}
-                                className="text-gray-400 hover:text-gray-600 transition"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <p className="text-xs text-gray-500 mb-3">Select the fields you want to include in your export:</p>
-
-                        {/* Select All / Clear */}
-                        <div className="flex gap-2 mb-3">
-                            <button
-                                onClick={() => setCustomExportFields(new Set([
-                                    "order_number", "product_name", "quantity_ordered", "unit", "delivery_due_date",
-                                    "retailer_name", "retailer_email", "retailer_address", "retailer_phone",
-                                    "order_status", "priority_level", "confidence_score", "source_of_order",
-                                    "remarks", "created_at", "processed_at", "client_email_subject"
-                                ]))}
-                                className="text-xs text-[#7c5327] hover:underline font-medium"
-                            >Select All</button>
-                            <span className="text-gray-300">|</span>
-                            <button
-                                onClick={() => setCustomExportFields(new Set())}
-                                className="text-xs text-gray-500 hover:underline font-medium"
-                            >Clear All</button>
-                        </div>
-
-                        {/* Field Checkboxes */}
-                        <div className="grid grid-cols-3 gap-x-4 gap-y-2 mb-4">
-                            {[
-                                { key: "order_number", label: "Order Number" },
-                                { key: "product_name", label: "Product Name" },
-                                { key: "quantity_ordered", label: "Quantity" },
-                                { key: "unit", label: "Unit" },
-                                { key: "delivery_due_date", label: "Due Date" },
-                                { key: "retailer_name", label: "Retailer Name" },
-                                { key: "retailer_email", label: "Retailer Email" },
-                                { key: "retailer_address", label: "Address" },
-                                { key: "retailer_phone", label: "Phone" },
-                                { key: "order_status", label: "Status" },
-                                { key: "priority_level", label: "Priority" },
-                                { key: "confidence_score", label: "Confidence" },
-                                { key: "source_of_order", label: "Source" },
-                                { key: "remarks", label: "Remarks" },
-                                { key: "created_at", label: "Created At" },
-                                { key: "processed_at", label: "Processed At" },
-                                { key: "client_email_subject", label: "Email Subject" },
-                            ].map(({ key, label }) => (
-                                <label key={key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-                                    <input
-                                        type="checkbox"
-                                        checked={customExportFields.has(key)}
-                                        onChange={(e) => {
-                                            setCustomExportFields(prev => {
-                                                const next = new Set(prev);
-                                                if (e.target.checked) next.add(key);
-                                                else next.delete(key);
-                                                return next;
-                                            });
-                                        }}
-                                        className="w-4 h-4 accent-[#7c5327] cursor-pointer"
-                                    />
-                                    {label}
-                                </label>
-                            ))}
-                        </div>
-
-                        {/* Format Selection */}
-                        <div className="flex items-center gap-4 mb-4 pt-3 border-t border-gray-200">
-                            <span className="text-sm font-medium text-gray-700">Format:</span>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name="exportFormat"
-                                    value="excel"
-                                    checked={customExportFormat === "excel"}
-                                    onChange={() => setCustomExportFormat("excel")}
-                                    className="accent-[#7c5327]"
-                                />
-                                <img src="/static/Excel.svg" className="w-4" alt="Excel" />
-                                <span className="text-sm text-gray-700">Excel</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name="exportFormat"
-                                    value="pdf"
-                                    checked={customExportFormat === "pdf"}
-                                    onChange={() => setCustomExportFormat("pdf")}
-                                    className="accent-[#7c5327]"
-                                />
-                                <img src="/static/Pdf.svg" className="w-4" alt="PDF" />
-                                <span className="text-sm text-gray-700">PDF</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name="exportFormat"
-                                    value="csv"
-                                    checked={customExportFormat === "csv"}
-                                    onChange={() => setCustomExportFormat("csv")}
-                                    className="accent-[#7c5327]"
-                                />
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-green-600"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
-                                <span className="text-sm text-gray-700">CSV</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name="exportFormat"
-                                    value="json"
-                                    checked={customExportFormat === "json"}
-                                    onChange={() => setCustomExportFormat("json")}
-                                    className="accent-[#7c5327]"
-                                />
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-yellow-600"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" /></svg>
-                                <span className="text-sm text-gray-700">JSON</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name="exportFormat"
-                                    value="xml"
-                                    checked={customExportFormat === "xml"}
-                                    onChange={() => setCustomExportFormat("xml")}
-                                    className="accent-[#7c5327]"
-                                />
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-orange-600"><path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" /></svg>
-                                <span className="text-sm text-gray-700">XML</span>
-                            </label>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex justify-between items-center pt-3 border-t border-gray-200">
-                            <span className="text-xs text-gray-400">{customExportFields.size} field(s) selected</span>
-                            <div className="flex gap-2">
+            {
+                showCustomOrderModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
+                        <div className="bg-white rounded-xl shadow-2xl p-5 w-[520px]">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-amber-200">
+                                <h3 className="text-lg font-bold text-[#7c5327]">Add Custom Order</h3>
                                 <button
-                                    onClick={() => setShowCustomExport(false)}
+                                    onClick={() => setShowCustomOrderModal(false)}
+                                    className="text-gray-400 hover:text-gray-600 transition"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Product Details Row */}
+                            <div className="grid grid-cols-3 gap-3 mb-3">
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Product Name *</label>
+                                    <input
+                                        type="text"
+                                        value={newOrder.product_name}
+                                        onChange={(e) => setNewOrder({ ...newOrder, product_name: e.target.value })}
+                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
+                                        placeholder="Enter product name"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Priority</label>
+                                    <select
+                                        value={newOrder.priority}
+                                        onChange={(e) => setNewOrder({ ...newOrder, priority: e.target.value })}
+                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
+                                    >
+                                        <option value="Normal">Normal</option>
+                                        <option value="Urgent">Urgent</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Quantity, Unit, Due Date Row */}
+                            <div className="grid grid-cols-3 gap-3 mb-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Quantity *</label>
+                                    <input
+                                        type="text"
+                                        value={newOrder.quantity}
+                                        onChange={(e) => setNewOrder({ ...newOrder, quantity: e.target.value })}
+                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
+                                        placeholder="Qty"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Unit</label>
+                                    <input
+                                        type="text"
+                                        value={newOrder.unit}
+                                        onChange={(e) => setNewOrder({ ...newOrder, unit: e.target.value })}
+                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
+                                        placeholder="pcs, kg"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-[#7c5327] mb-1">Due Date *</label>
+                                    <input
+                                        type="date"
+                                        value={newOrder.due_date}
+                                        onChange={(e) => setNewOrder({ ...newOrder, due_date: e.target.value })}
+                                        className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Retailer Section */}
+                            <div className="bg-amber-50 rounded-lg p-3 mb-3 border border-amber-200">
+                                <h4 className="text-xs font-bold text-[#7c5327] mb-2 uppercase tracking-wide">Retailer Details</h4>
+
+                                <div className="grid grid-cols-2 gap-3 mb-2">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-[#7c5327] mb-1">Name *</label>
+                                        <input
+                                            type="text"
+                                            value={newOrder.retailer_name}
+                                            onChange={(e) => setNewOrder({ ...newOrder, retailer_name: e.target.value })}
+                                            className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
+                                            placeholder="Retailer name"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-[#7c5327] mb-1">Email *</label>
+                                        <input
+                                            type="email"
+                                            value={newOrder.retailer_email}
+                                            onChange={(e) => setNewOrder({ ...newOrder, retailer_email: e.target.value })}
+                                            className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
+                                            placeholder="Email address"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-[#7c5327] mb-1">Phone</label>
+                                        <input
+                                            type="text"
+                                            value={newOrder.phone}
+                                            onChange={(e) => setNewOrder({ ...newOrder, phone: e.target.value })}
+                                            className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
+                                            placeholder="Phone number"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-[#7c5327] mb-1">Address</label>
+                                        <input
+                                            type="text"
+                                            value={newOrder.address}
+                                            onChange={(e) => setNewOrder({ ...newOrder, address: e.target.value })}
+                                            className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none bg-white"
+                                            placeholder="Address"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Remarks */}
+                            <div className="mb-4">
+                                <label className="block text-xs font-semibold text-[#7c5327] mb-1">Remarks</label>
+                                <textarea
+                                    value={newOrder.remarks}
+                                    onChange={(e) => setNewOrder({ ...newOrder, remarks: e.target.value })}
+                                    className="w-full border border-amber-300 rounded px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none h-14 resize-none"
+                                    placeholder="Optional notes..."
+                                />
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                                <button
+                                    onClick={() => setShowCustomOrderModal(false)}
                                     className="px-4 py-2 text-[#7c5327] bg-amber-100 hover:bg-amber-200 rounded-md font-medium text-sm transition"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    disabled={customExportFields.size === 0}
-                                    onClick={async () => {
-                                        try {
-                                            const res = await fetch(`${API_URL}/export/custom`, {
-                                                method: "POST",
-                                                headers: { "Content-Type": "application/json" },
-                                                body: JSON.stringify({
-                                                    fields: Array.from(customExportFields),
-                                                    format: customExportFormat,
-                                                    ...(selectedIds.size > 0 && { ids: Array.from(selectedIds) })
-                                                }),
-                                                credentials: "include"
-                                            });
-                                            const blob = await res.blob();
-                                            const url = window.URL.createObjectURL(blob);
-                                            const a = document.createElement("a");
-                                            a.href = url;
-                                            a.download = `ERP_Orders_Custom.${({ pdf: "pdf", excel: "xlsx", csv: "csv", json: "json", xml: "xml" })[customExportFormat] || "xlsx"}`;
-                                            document.body.appendChild(a);
-                                            a.click();
-                                            a.remove();
-                                            window.URL.revokeObjectURL(url);
-                                            setShowCustomExport(false);
-                                            setToast({ type: "mail-updated", message: "Custom export downloaded!" });
-                                        } catch (err) {
-                                            console.error("Custom export error:", err);
-                                            setToast({ type: "no-email", message: "Export failed" });
-                                        }
-                                    }}
-                                    className="px-5 py-2 bg-[#7c5327] hover:bg-[#5c3d1a] text-white rounded-md font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    onClick={handleAddOrder}
+                                    disabled={isSubmitting || !newOrder.product_name || !newOrder.quantity || !newOrder.due_date || !newOrder.retailer_name || !newOrder.retailer_email}
+                                    className="px-5 py-2 bg-[#7c5327] hover:bg-[#5c3d1a] text-white rounded-md font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                                    </svg>
-                                    Export
+                                    {isSubmitting ? "Saving..." : "Save Order"}
                                 </button>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            <Footer />
+            {/* Custom Export Modal */}
+            {
+                showCustomExport && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
+                        <div className="bg-white rounded-xl shadow-2xl p-5 w-[520px]">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-amber-200">
+                                <div className="flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-[#7c5327]">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+                                    </svg>
+                                    <h3 className="text-lg font-bold text-[#7c5327]">Custom Export</h3>
+                                </div>
+                                <button
+                                    onClick={() => setShowCustomExport(false)}
+                                    className="text-gray-400 hover:text-gray-600 transition"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <p className="text-xs text-gray-500 mb-3">Select the fields you want to include in your export:</p>
+
+                            {/* Select All / Clear */}
+                            <div className="flex gap-2 mb-3">
+                                <button
+                                    onClick={() => setCustomExportFields(new Set([
+                                        "order_number", "product_name", "quantity_ordered", "unit", "delivery_due_date",
+                                        "retailer_name", "retailer_email", "retailer_address", "retailer_phone",
+                                        "order_status", "priority_level", "confidence_score", "source_of_order",
+                                        "remarks", "created_at", "processed_at", "client_email_subject"
+                                    ]))}
+                                    className="text-xs text-[#7c5327] hover:underline font-medium"
+                                >Select All</button>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                    onClick={() => setCustomExportFields(new Set())}
+                                    className="text-xs text-gray-500 hover:underline font-medium"
+                                >Clear All</button>
+                            </div>
+
+                            {/* Field Checkboxes */}
+                            <div className="grid grid-cols-3 gap-x-4 gap-y-2 mb-4">
+                                {[
+                                    { key: "order_number", label: "Order Number" },
+                                    { key: "product_name", label: "Product Name" },
+                                    { key: "quantity_ordered", label: "Quantity" },
+                                    { key: "unit", label: "Unit" },
+                                    { key: "delivery_due_date", label: "Due Date" },
+                                    { key: "retailer_name", label: "Retailer Name" },
+                                    { key: "retailer_email", label: "Retailer Email" },
+                                    { key: "retailer_address", label: "Address" },
+                                    { key: "retailer_phone", label: "Phone" },
+                                    { key: "order_status", label: "Status" },
+                                    { key: "priority_level", label: "Priority" },
+                                    { key: "confidence_score", label: "Confidence" },
+                                    { key: "source_of_order", label: "Source" },
+                                    { key: "remarks", label: "Remarks" },
+                                    { key: "created_at", label: "Created At" },
+                                    { key: "processed_at", label: "Processed At" },
+                                    { key: "client_email_subject", label: "Email Subject" },
+                                ].map(({ key, label }) => (
+                                    <label key={key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
+                                        <input
+                                            type="checkbox"
+                                            checked={customExportFields.has(key)}
+                                            onChange={(e) => {
+                                                setCustomExportFields(prev => {
+                                                    const next = new Set(prev);
+                                                    if (e.target.checked) next.add(key);
+                                                    else next.delete(key);
+                                                    return next;
+                                                });
+                                            }}
+                                            className="w-4 h-4 accent-[#7c5327] cursor-pointer"
+                                        />
+                                        {label}
+                                    </label>
+                                ))}
+                            </div>
+
+                            {/* Format Selection */}
+                            <div className="flex items-center gap-4 mb-4 pt-3 border-t border-gray-200">
+                                <span className="text-sm font-medium text-gray-700">Format:</span>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="exportFormat"
+                                        value="excel"
+                                        checked={customExportFormat === "excel"}
+                                        onChange={() => setCustomExportFormat("excel")}
+                                        className="accent-[#7c5327]"
+                                    />
+                                    <img src="/static/Excel.svg" className="w-4" alt="Excel" />
+                                    <span className="text-sm text-gray-700">Excel</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="exportFormat"
+                                        value="pdf"
+                                        checked={customExportFormat === "pdf"}
+                                        onChange={() => setCustomExportFormat("pdf")}
+                                        className="accent-[#7c5327]"
+                                    />
+                                    <img src="/static/Pdf.svg" className="w-4" alt="PDF" />
+                                    <span className="text-sm text-gray-700">PDF</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="exportFormat"
+                                        value="csv"
+                                        checked={customExportFormat === "csv"}
+                                        onChange={() => setCustomExportFormat("csv")}
+                                        className="accent-[#7c5327]"
+                                    />
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-green-600"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                                    <span className="text-sm text-gray-700">CSV</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="exportFormat"
+                                        value="json"
+                                        checked={customExportFormat === "json"}
+                                        onChange={() => setCustomExportFormat("json")}
+                                        className="accent-[#7c5327]"
+                                    />
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-yellow-600"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" /></svg>
+                                    <span className="text-sm text-gray-700">JSON</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="exportFormat"
+                                        value="xml"
+                                        checked={customExportFormat === "xml"}
+                                        onChange={() => setCustomExportFormat("xml")}
+                                        className="accent-[#7c5327]"
+                                    />
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-orange-600"><path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" /></svg>
+                                    <span className="text-sm text-gray-700">XML</span>
+                                </label>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+                                <span className="text-xs text-gray-400">{customExportFields.size} field(s) selected</span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setShowCustomExport(false)}
+                                        className="px-4 py-2 text-[#7c5327] bg-amber-100 hover:bg-amber-200 rounded-md font-medium text-sm transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        disabled={customExportFields.size === 0}
+                                        onClick={async () => {
+                                            try {
+                                                const res = await fetch(`${API_URL}/export/custom`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({
+                                                        fields: Array.from(customExportFields),
+                                                        format: customExportFormat,
+                                                        ...(selectedIds.size > 0 && { ids: Array.from(selectedIds) })
+                                                    }),
+                                                    credentials: "include"
+                                                });
+                                                const blob = await res.blob();
+                                                const url = window.URL.createObjectURL(blob);
+                                                const a = document.createElement("a");
+                                                a.href = url;
+                                                a.download = `ERP_Orders_Custom.${({ pdf: "pdf", excel: "xlsx", csv: "csv", json: "json", xml: "xml" })[customExportFormat] || "xlsx"}`;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                a.remove();
+                                                window.URL.revokeObjectURL(url);
+                                                setShowCustomExport(false);
+                                                setToast({ type: "mail-updated", message: "Custom export downloaded!" });
+                                            } catch (err) {
+                                                console.error("Custom export error:", err);
+                                                setToast({ type: "no-email", message: "Export failed" });
+                                            }
+                                        }}
+                                        className="px-5 py-2 bg-[#7c5327] hover:bg-[#5c3d1a] text-white rounded-md font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                        </svg>
+                                        Export
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            <div className="shrink-0">
+                <Footer />
+            </div>
             <style>{`
           .loader {
             width: 50px;
@@ -1260,7 +1326,7 @@ const Orders = ({ user, handleLogout }) => {
             scrollbar-width: none;  /* Firefox */
           }
       `}</style>
-        </div>
+        </div >
     );
 };
 
