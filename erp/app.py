@@ -198,7 +198,7 @@ def chart_data():
 def recent_activity():
     orders = db_session.query(PurchaseOrder).filter(
         PurchaseOrder.deleted_at.is_(None)
-    ).order_by(PurchaseOrder.created_at.desc()).limit(3).all()
+    ).order_by(PurchaseOrder.created_at.desc()).limit(8).all()
 
     now = datetime.utcnow()
     activities = []
