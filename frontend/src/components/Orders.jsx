@@ -621,11 +621,11 @@ const Orders = ({ user, handleLogout }) => {
                         <div className="w-[10%]">Retailer Name</div>
                         <div className="w-[12%]">Retailer Email</div>
                         <div className="w-[13%]">Retailer Address</div>
-                        <div className="w-[13%]">Email Subject</div>
-                        <div className="w-[6%]">Status</div>
-                        <div className="w-[5%]">Priority</div>
-                        <div className="w-[5%]">Confidence</div>
-                        <div className="w-[3%]">Actions</div>
+                        <div className="w-[16%]">Email Subject</div>
+                        <div className="w-[5%] border-l border-white/30 pl-2">Status</div>
+                        <div className="w-[4%]">Priority</div>
+                        <div className="w-[4%] pl-4">Confidence</div>
+
                     </div>
                 </div>
 
@@ -634,7 +634,7 @@ const Orders = ({ user, handleLogout }) => {
                     {filteredOrders
                         .map((order) => (
                             <React.Fragment key={order.id}>
-                                <div className={`flex items-center py-3 px-4 hover:bg-gray-50 text-sm text-gray-900 ${selectedIds.has(order.id) ? 'bg-amber-50' : ''}`}>
+                                <div onClick={() => setExpandedRow(expandedRow === order.id ? null : order.id)} className={`flex items-center py-3 px-4 hover:bg-gray-50 text-sm text-gray-900 cursor-pointer ${selectedIds.has(order.id) ? 'bg-amber-50' : ''}`}>
                                     <div className="w-[3%] flex items-center">
                                         <input
                                             type="checkbox"
@@ -657,29 +657,32 @@ const Orders = ({ user, handleLogout }) => {
                                     <div className="w-[10%] truncate">{order.retailer_name}</div>
                                     <div className="w-[12%] truncate">{order.retailer_email}</div>
                                     <div className="w-[13%] truncate">{order.retailer_address}</div>
-                                    <div className="w-[13%] truncate">{order.source_of_order === 'Manual' ? <span className="text-gray-500 italic">Manual Entry</span> : order.client_email_subject}</div>
+                                    <div className="w-[16%] truncate">{order.source_of_order === 'Manual' ? <span className="text-gray-500 italic">Manual Entry</span> : order.client_email_subject}</div>
 
                                     {/* Status */}
-                                    <div className="w-[6%]">
-                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.order_status === 'Approved' ? 'bg-green-200 text-green-800' :
-                                            order.order_status === 'Needs Review' ? 'bg-yellow-200 text-yellow-800' :
-                                                'bg-red-200 text-red-800'
-                                            }`}>
-                                            {order.order_status}
-                                        </span>
+                                    <div className="w-[5%] border-l border-gray-300 flex justify-center" title={order.order_status}>
+                                        {order.order_status === 'Approved' ? (
+                                            <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
+                                        ) : order.order_status === 'Needs Review' ? (
+                                            <svg className="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>
+                                        ) : order.order_status === 'Rejected' ? (
+                                            <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z" /></svg>
+                                        ) : (
+                                            <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14v-4h2v4h-2zm0-6V7h2v3h-2z" /></svg>
+                                        )}
                                     </div>
 
                                     {/* Priority */}
-                                    <div className="w-[5%]">
-                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.priority_level === 'Urgent' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-800'
+                                    <div className="w-[4%] flex justify-center">
+                                        <span className={`px-1 py-px rounded text-[10px] font-semibold ${order.priority_level === 'Urgent' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-800'
                                             }`}>
                                             {order.priority_level}
                                         </span>
                                     </div>
 
                                     {/* Confidence */}
-                                    <div className="w-[5%]">
-                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${order.confidence_score < 70 ? 'bg-red-200 text-red-800' :
+                                    <div className="w-[4%] flex justify-center pl-4">
+                                        <span className={`px-1 py-px rounded text-[10px] font-semibold ${order.confidence_score < 70 ? 'bg-red-200 text-red-800' :
                                             order.confidence_score < 85 ? 'bg-yellow-200 text-yellow-800' :
                                                 'bg-green-200 text-green-800'
                                             }`}>
@@ -687,23 +690,11 @@ const Orders = ({ user, handleLogout }) => {
                                         </span>
                                     </div>
 
-                                    {/* Actions */}
-                                    <div className="w-[3%] flex justify-center">
-                                        <button
-                                            onClick={() => setExpandedRow(expandedRow === order.id ? null : order.id)}
-                                            className="bg-gray-200 hover:bg-gray-300 px-2 rounded"
-                                        >
-                                            ▼
-                                        </button>
-                                        <button
-                                            onClick={() => setDeleteId(order.id)}
-                                            className="bg-transparent hover:bg-red-100 p-1.5 rounded transition"
-                                            title="Delete Order"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#dc3545" className="w-5 h-5">
-                                                <path d="M5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6zm3 2v10h2V8H8zm6 0v10h2V8h-2zM9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1zm-5 2h16v1H4V5z" />
-                                            </svg>
-                                        </button>
+                                    {/* Expand indicator */}
+                                    <div className="flex-1 flex justify-end">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedRow === order.id ? 'rotate-180' : ''}`}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                        </svg>
                                     </div>
                                 </div>
 
